@@ -1,0 +1,11 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# İşletim Sistemi
+.DS_Store
+Thumbs.db
+
+# Gizli dosyalar
+.env
