@@ -1,73 +1,103 @@
-from fastapi import FastAPI, File, UploadFile
-import cv2
-import numpy as np
-from ultralytics import YOLO
-import requests
-import os
-from dotenv import load_dotenv  
+from contextlib import asynccontextmanager
 
-load_dotenv()
+from fastapi import FastAPI, File, HTTPException, UploadFile
 
-app = FastAPI(title="EcoChef API", description="Akıllı Mutfak Asistanı")
+from core.logger import get_logger
+from core.orchestrator import EcoChefOrchestrator
+from connectors.spoonacular import get_recipe_detail
+from schemas.ingredient import TextInput
+from schemas.response import (
+    HealthResponse,
+    HybridPipelineResponse,
+    ImagePipelineResponse,
+    RecipeDetailResponse,
+    TextPipelineResponse,
+)
 
-model = YOLO("yolov8n.pt") 
+log = get_logger(__name__)
 
-# Spoonacular API Ayarları
-SPOONACULAR_API_KEY = os.getenv("SPOONACULAR_API_KEY")
-SPOONACULAR_URL = "https://api.spoonacular.com/recipes/findByIngredients"
 
-@app.get("/")
-def read_root():
-    return {"mesaj": "EcoChef backend'i başarıyla ayağa kalktı! Harika iş."}
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    log.info("EcoChef API starting up...")
+    yield
+    log.info("EcoChef API shutting down.")
 
-@app.post("/detect-ingredients/")
-async def detect_ingredients(file: UploadFile = File(...)):
-    # 1. Fotoğrafı okuma ve YOLO ile analiz (Önceki yazdığımız kısım)
-    contents = await file.read()
-    nparr = np.frombuffer(contents, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    results = model(img)
-    
-    detected_items = []
-    for r in results:
-        for box in r.boxes:
-            class_id = int(box.cls[0])
-            class_name = model.names[class_id]
-            detected_items.append(class_name)
+app = FastAPI(
+    title="EcoChef API",
+    description="Yapay Zeka Destekli Akıllı Mutfak Asistanı (YOLO + NLP)",
+    version="0.4.0",
+    lifespan=lifespan,
+)
 
-    unique_items = list(set(detected_items))
+orchestrator = EcoChefOrchestrator()
 
-    # Eğer fotoğrafta yiyecek bulunamadıysa uyarı verelim
-    if not unique_items:
-        return {"mesaj": "Fotoğrafta herhangi bir malzeme tespit edilemedi.", "tarifler": []}
 
-    # 2. YENİ KISIM: Bulunan malzemeleri virgülle ayırarak Spoonacular'a gönderiyoruz
-    ingredients_string = ",".join(unique_items)
-    
-    params = {
-        "ingredients": ingredients_string,
-        "number": 3, # Bize en iyi 3 tarifi getirsin
-        "apiKey": SPOONACULAR_API_KEY
-    }
+@app.get("/", response_model=HealthResponse)
+def read_root() -> HealthResponse:
+    return HealthResponse(
+        durum="Çalışıyor",
+        mesaj="EcoChef Hibrit (YOLO+NLP) Backend'i başarıyla ayağa kalktı!",
+    )
 
-    response = requests.get(SPOONACULAR_URL, params=params)
-    recipes = response.json()
 
-    # Sadece ihtiyacımız olan bilgileri (Tarif adı, fotoğrafı, eksik malzemeler) filtreleyelim
-    formatted_recipes = []
-    if response.status_code == 200:
-        for recipe in recipes:
-            formatted_recipes.append({
-                "id": recipe.get("id"),
-                "isim": recipe.get("title"),
-                "gorsel": recipe.get("image"),
-                "kullanilan_malzemeler": [ing["name"] for ing in recipe.get("usedIngredients", [])],
-                "eksik_malzemeler": [ing["name"] for ing in recipe.get("missedIngredients", [])]
-            })
+@app.post("/detect-ingredients/", response_model=ImagePipelineResponse)
+async def detect_ingredients(file: UploadFile = File(...)) -> ImagePipelineResponse:
+    """Pipeline 1: Görsel → YOLO → Spoonacular"""
+    try:
+        result = orchestrator.image_pipeline(await file.read())
+    except ValueError as e:
+        return ImagePipelineResponse(
+            tespit_edilen_malzemeler=[],
+            bulunan_tarifler=[],
+            mesaj=str(e),
+        )
+    except ConnectionError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
-    return {
-        "tespit_edilen_malzemeler": unique_items,
-        "bulunan_tarifler": formatted_recipes,
-        "mesaj": "Malzemeler tespit edildi ve tarifler başarıyla getirildi!"
-    }
+    return ImagePipelineResponse(
+        tespit_edilen_malzemeler=result.detected_ingredients,
+        bulunan_tarifler=result.recipes,
+        mesaj=result.message,
+    )
+
+
+@app.post("/analyze-text-ingredients/", response_model=TextPipelineResponse)
+def analyze_text_ingredients(request: TextInput) -> TextPipelineResponse:
+    """Pipeline 2: Metin → NLP → Öneri"""
+    try:
+        result = orchestrator.text_pipeline(request.text)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return TextPipelineResponse(basari=True, sonuclar=result.suggestions)
+
+
+@app.get("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
+def recipe_detail(recipe_id: int) -> RecipeDetailResponse:
+    """Tarif ID'sine göre detay ve adım adım yapılışı döner."""
+    try:
+        data = get_recipe_detail(recipe_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ConnectionError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return RecipeDetailResponse(**data)
+
+
+@app.post("/hybrid-suggest/", response_model=HybridPipelineResponse)
+async def hybrid_suggest(file: UploadFile = File(...)) -> HybridPipelineResponse:
+    """Pipeline 3: Görsel → YOLO → NLP (internet bağlantısı gerekmez)"""
+    try:
+        result = orchestrator.hybrid_pipeline(await file.read())
+    except (ValueError, FileNotFoundError) as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return HybridPipelineResponse(
+        tespit_edilen_malzemeler=result.detected_ingredients,
+        nlp_onerileri=result.nlp_suggestions,
+        mesaj=result.message,
+    )

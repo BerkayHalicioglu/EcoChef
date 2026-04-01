@@ -2,6 +2,15 @@
 venv/
 __pycache__/
 *.pyc
+*.pyc
+
+# Model dosyaları (büyük binary)
+*.gguf
+*.pt
+
+# Test görselleri
+backend/test_*.jpg
+backend/test_*.png
 
 # İşletim Sistemi
 .DS_Store
