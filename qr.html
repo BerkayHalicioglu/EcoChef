@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>EcoChef QR</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <style>
+    body { display:flex; flex-direction:column; align-items:center; justify-content:center;
+           min-height:100vh; font-family:sans-serif; background:#f0f4f0; }
+    h2 { color:#2e7d32; margin-bottom:20px; }
+    p  { color:#555; font-size:14px; margin-top:12px; }
+  </style>
+</head>
+<body>
+  <h2>EcoChef — Expo Go ile Tara</h2>
+  <canvas id="qr"></canvas>
+  <p>exp://cold-goofball-unaired.ngrok-free.dev:80</p>
+  <script>
+    QRCode.toCanvas(document.getElementById('qr'), 'exp://cold-goofball-unaired.ngrok-free.dev:80',
+      { width: 300, margin: 2 }, function(e){ if(e) console.error(e); });
+  </script>
+</body>
+</html>

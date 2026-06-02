@@ -1,0 +1,29 @@
+# Sanal ortam
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Model dosyaları — volume ile bağlanır, image'a dahil edilmez
+*.pt
+*.gguf
+
+# Veritabanı — volume ile bağlanır
+*.db
+
+# Gizli dosyalar
+.env
+
+# Test çıktıları
+.pytest_cache/
+htmlcov/
+.coverage
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

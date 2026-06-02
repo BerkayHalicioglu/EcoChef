@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>EcoChef — Sistem Mimarisi</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0f1117;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    padding: 40px 20px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+
+  h1 {
+    color: #fff;
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 6px;
+    letter-spacing: -0.3px;
+  }
+
+  .subtitle {
+    color: #888;
+    font-size: 13px;
+    margin-bottom: 36px;
+  }
+
+  /* ── Dış konteyner ── */
+  .diagram {
+    width: 960px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* ── Katman ── */
+  .layer {
+    position: relative;
+    border-radius: 14px;
+    padding: 18px 22px 22px;
+    margin-bottom: 0;
+    border: 1.5px solid transparent;
+  }
+
+  .layer-label {
+    position: absolute;
+    top: -13px;
+    left: 22px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+
+  /* ── Kartlar yatay sıra ── */
+  .layer-row {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    margin-top: 6px;
+  }
+
+  /* ── Kutu ── */
+  .box {
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+    border: 1.5px solid transparent;
+    transition: transform 0.15s;
+    cursor: default;
+    flex: 1;
+  }
+
+  .box:hover { transform: translateY(-2px); }
+
+  .box-icon  { font-size: 28px; line-height: 1; }
+  .box-title { font-size: 12px; font-weight: 800; line-height: 1.2; }
+  .box-sub   { font-size: 10px; opacity: 0.7; line-height: 1.3; }
+
+  .box-tag {
+    font-size: 8.5px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  /* ── Ok bağlayıcı ── */
+  .connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 0;
+    position: relative;
+    z-index: 10;
+  }
+
+  .connector-line {
+    width: 2px;
+    height: 22px;
+    background: linear-gradient(to bottom, #333, #555);
+  }
+
+  .connector-label {
+    font-size: 9px;
+    color: #666;
+    background: #0f1117;
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid #333;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  .connector-arrow {
+    color: #555;
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  /* ─────────── KATMAN RENKLERİ ─────────── */
+
+  /* Katman 0 — Kullanıcı */
+  .layer-user {
+    background: linear-gradient(135deg, #0d1f2d 0%, #112233 100%);
+    border-color: #1e3a52;
+  }
+  .layer-user .layer-label { background: #1e4d7a; color: #7dd3fc; }
+  .layer-user .box { background: #0a2540; border-color: #1d4ed8; color: #bfdbfe; }
+  .layer-user .box-tag { background: #1e3a8a; color: #93c5fd; }
+
+  /* Katman 1 — Mobile */
+  .layer-mobile {
+    background: linear-gradient(135deg, #0a1628 0%, #0d1f3c 100%);
+    border-color: #1d3a6e;
+  }
+  .layer-mobile .layer-label { background: #1d3a6e; color: #93c5fd; }
+  .layer-mobile .box { background: #0f2044; border-color: #2563eb; color: #bfdbfe; }
+  .layer-mobile .box-tag { background: #1e3a8a; color: #93c5fd; }
+
+  /* Katman 2 — API */
+  .layer-api {
+    background: linear-gradient(135deg, #051a0f 0%, #0a2818 100%);
+    border-color: #16532d;
+  }
+  .layer-api .layer-label { background: #166534; color: #86efac; }
+  .layer-api .box { background: #052e16; border-color: #16a34a; color: #bbf7d0; }
+  .layer-api .box-tag { background: #14532d; color: #86efac; }
+
+  /* Katman 3 — AI */
+  .layer-ai {
+    background: linear-gradient(135deg, #1a0d2e 0%, #21103a 100%);
+    border-color: #4c1d95;
+  }
+  .layer-ai .layer-label { background: #5b21b6; color: #ddd6fe; }
+  .layer-ai .box { background: #1e0a3c; border-color: #7c3aed; color: #e9d5ff; }
+  .layer-ai .box-tag { background: #4c1d95; color: #c4b5fd; }
+
+  /* Katman 4 — Dış Servisler */
+  .layer-ext {
+    background: linear-gradient(135deg, #1a1000 0%, #261800 100%);
+    border-color: #78350f;
+  }
+  .layer-ext .layer-label { background: #92400e; color: #fde68a; }
+  .layer-ext .box { background: #1c1200; border-color: #d97706; color: #fde68a; }
+  .layer-ext .box-tag { background: #78350f; color: #fcd34d; }
+
+  /* Katman 5 — Veri */
+  .layer-data {
+    background: linear-gradient(135deg, #001a1a 0%, #002626 100%);
+    border-color: #134e4a;
+  }
+  .layer-data .layer-label { background: #0f766e; color: #99f6e4; }
+  .layer-data .box { background: #022c2c; border-color: #0d9488; color: #99f6e4; }
+  .layer-data .box-tag { background: #134e4a; color: #5eead4; }
+
+  /* Katman 6 — Docker */
+  .layer-docker {
+    background: linear-gradient(135deg, #001020 0%, #001830 100%);
+    border-color: #1e3a5f;
+    border-style: dashed;
+  }
+  .layer-docker .layer-label { background: #1e40af; color: #bfdbfe; }
+  .layer-docker .box { background: #001428; border-color: #3b82f6; color: #bfdbfe; }
+  .layer-docker .box-tag { background: #1e3a8a; color: #93c5fd; }
+
+  /* ── Özel geniş kutular ── */
+  .box-wide { flex: 2; }
+  .box-narrow { flex: 0.7; }
+
+  /* ── Divider / bağlantı noktaları ── */
+  .multi-connector {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-around;
+    padding: 4px 40px;
+    position: relative;
+  }
+
+  .multi-connector::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 10%;
+    right: 10%;
+    height: 1.5px;
+    background: linear-gradient(to right, transparent, #2a2a2a 20%, #2a2a2a 80%, transparent);
+  }
+
+  .mc-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .mc-line-v {
+    width: 1.5px;
+    height: 18px;
+    background: #2a2a2a;
+  }
+
+  .mc-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #333;
+    border: 1.5px solid #555;
+  }
+
+  .mc-label {
+    font-size: 8.5px;
+    color: #555;
+    font-weight: 600;
+    background: #0f1117;
+    padding: 1px 6px;
+    border-radius: 8px;
+    white-space: nowrap;
+  }
+
+  /* ── Büyük ok ── */
+  .big-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 4px 0;
+  }
+
+  .big-arrow-line {
+    flex: 1;
+    height: 1.5px;
+    background: linear-gradient(to right, transparent, #2d2d2d);
+  }
+
+  .big-arrow-line.rev {
+    background: linear-gradient(to left, transparent, #2d2d2d);
+  }
+
+  .big-arrow-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  /* ── Alt çizgi dekorasyon ── */
+  .layer-bottom-dots {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 30px 0;
+    opacity: 0.3;
+  }
+
+  .dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex;
+    gap: 20px;
+    margin-top: 30px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: #888;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+  }
+
+  /* ── Print ── */
+  @media print {
+    body { background: white; }
+    .diagram { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<h1>🌿 EcoChef — Sistem Mimarisi</h1>
+<p class="subtitle">Katmanlı yazılım mimarisi · FastAPI + React Native + YOLOv8 + Llama GGUF + MySQL + Docker</p>
+
+<div class="diagram">
+
+  <!-- ══════════════════════════════════════════════════
+       KATMAN 0 — KULLANICI
+  ══════════════════════════════════════════════════ -->
+  <div class="layer layer-user">
+    <span class="layer-label">Katman 0 · Kullanıcı</span>
+    <div class="layer-row">
+      <div class="box">
+        <span class="box-icon">📱</span>
+        <span class="box-title">iOS Cihazı</span>
+        <span class="box-sub">iPhone / iPad</span>
+        <span class="box-tag">Expo Go</span>
+      </div>
+      <div class="box">
+        <span class="box-icon">🤖</span>
+        <span class="box-title">Android Cihazı</span>
+        <span class="box-sub">Android 10+</span>
+        <span class="box-tag">Expo Go</span>
+      </div>
+      <div class="box">
+        <span class="box-icon">💻</span>
+        <span class="box-title">Web Tarayıcı</span>
+        <span class="box-sub">Expo Web</span>
+        <span class="box-tag">Chrome / Safari</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ok: Kullanıcı → Mobile -->
+  <div class="connector">
+    <div class="connector-line"></div>
+    <div class="connector-label">📡 HTTP · Metro Bundler · UI Etkileşim</div>
+    <div class="connector-line"></div>
+    <div class="connector-arrow">▼</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       KATMAN 1 — MOBILE (React Native)
+  ══════════════════════════════════════════════════ -->
+  <div class="layer layer-mobile">
+    <span class="layer-label">Katman 1 · Sunum Katmanı — React Native / Expo SDK 54</span>
+    <div class="layer-row">
+      <div class="box">
+        <span class="box-icon">🏠</span>
+        <span class="box-title">Ana Ekran</span>
+        <span class="box-sub">Görsel / Metin arama</span>
+        <span class="box-tag">index.tsx</span>
+      </div>
+      <div class="box">
+        <span class="box-icon">📷</span>
+        <span class="box-title">Canlı Tarama</span>
+        <span class="box-sub">Expo Camera</span>
+        <span class="box-tag">live-scan.tsx</span>
+      </div>
+      <div class="box">
+        <span class="box-icon">🔀</span>
+        <span class="box-title">Hibrit Mod</span>
+        <span class="box-sub">Görsel + NLP</span>
+        <span class="box-tag">hybrid.tsx</span>
+      </div>
+      <div class="box">
+        <span class="box-icon">🍽️</span>
+        <span class="box-title">Tarif Detayı</span>
+        <span class="box-sub">Puan · Plan · Favori</span>
+        <span class="box-tag">recipe/[id].tsx</span>
+      </div>
+      <div class="box">
+        <span class="box-icon">📅</span>
+        <span class="box-title">Yemek Planı</span>
+        <span class="box-sub">7 gün × 3 öğün</span>
+        <span class="box-tag">plan.tsx</span>
+      </div>
+    </div>
+    <div class="layer-row" style="margin-top:10px">
+      <div class="box" style="flex:0.8">
+        <span class="box-icon">🔄</span>
+        <span class="box-title">AuthContext</span>
+        <span class="box-sub">JWT · SecureStore</span>
+        <span class="box-tag">Context API</span>
+      </div>
+      <div class="box" style="flex:0.8">
+        <span class="box-icon">❤️</span>
+        <span class="box-title">FavoritesCtx</span>
+        <span class="box-sub">Optimistik UI</span>
+        <span class="box-tag">Context API</span>
+      </div>
+      <div class="box" style="flex:0.8">
+        <span class="box-icon">🛒</span>
+        <span class="box-title">ShoppingCtx</span>
+        <span class="box-sub">AsyncStorage</span>
+        <span class="box-tag">Context API</span>
+      </div>
+      <div class="box" style="flex:0.8">
+        <span class="box-icon">🌐</span>
+        <span class="box-title">i18n / TR–EN</span>
+        <span class="box-sub">Cihaz dili algılar</span>
+        <span class="box-tag">i18n-js</span>
+      </div>
+      <div class="box" style="flex:0.8">
+        <span class="box-icon">📶</span>
+        <span class="box-title">NetworkStatus</span>
+        <span class="box-sub">Offline cache</span>
+        <span class="box-tag">useNetworkStatus</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ok: Mobile → API -->
+  <div class="connector">
+    <div class="connector-line"></div>
+    <div class="connector-label">🔐 HTTPS · REST · Bearer JWT · multipart/form-data</div>
+    <div class="connector-line"></div>
+    <div class="connector-arrow">▼</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       KATMAN 2 — API GATEWAY
+  ══════════════════════════════════════════════════ -->
+  <div class="layer layer-api">
+    <span class="layer-label">Katman 2 · API Katmanı — FastAPI 0.135 · Python 3.12 · Uvicorn :8000</span>
+    <div class="layer-row">
+      <div class="box box-wide">
+        <span class="box-icon">⚡</span>
+        <span class="box-title">FastAPI Router</span>
+        <span class="box-sub">42 endpoint · OpenAPI / Swagger otomatik dokümantasyon</span>
+        <span class="box-tag">main.py</span>
+      </div>
+      <div class="box">
+        <span class="box-icon">🔑</span>
+        <span class="box-title">Auth Middleware</span>
+        <span class="box-sub">JWT doğrulama<br>Token blacklist</span>
+        <span class="box-tag">core/auth.py</span>
+      </div>
+      <div class="box">
+        <span class="box-icon">🚦</span>
+        <span class="box-title">Rate Limiter</span>
+        <span class="box-sub">10/dk görsel<br>20/dk metin</span>
+        <span class="box-tag">slowapi</span>
+      </div>
+      <div class="box">
+        <span class="box-icon">✅</span>
+        <span class="box-title">Pydantic Schemas</span>
+        <span class="box-sub">Request / Response<br>tip doğrulama</span>
+        <span class="box-tag">schemas/</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ok: API → Orchestrator -->
+  <div class="connector">
+    <div class="connector-line"></div>
+    <div class="connector-label">⚙️ Pipeline yönlendirme · Görsel / Metin / Hibrit</div>
+    <div class="connector-line"></div>
+    <div class="connector-arrow">▼</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       KATMAN 3 — AI / İŞ MANTIĞI
+  ══════════════════════════════════════════════════ -->
+  <div class="layer layer-ai">
+    <span class="layer-label">Katman 3 · İş Mantığı &amp; AI Katmanı — Orchestrator + Agents</span>
+
+    <!-- Orchestrator -->
+    <div class="layer-row" style="margin-bottom:10px">
+      <div class="box" style="background:#2d0b5c; border-color:#a855f7; flex:1">
+        <span class="box-icon">🎯</span>
+        <span class="box-title" style="font-size:13px">Orchestrator</span>
+        <span class="box-sub">Pipeline 1 · Pipeline 2 · Pipeline 3 yönetimi<br>ThreadPoolExecutor ile paralel API çağrısı</span>
+        <span class="box-tag">core/orchestrator.py</span>
+      </div>
+    </div>
+
+    <!-- Üç pipeline -->
+    <div class="layer-row">
+      <!-- Pipeline 1 -->
+      <div style="flex:1; background:#160838; border:1.5px solid #6d28d9; border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:8px;">
+        <div style="font-size:10px; font-weight:800; color:#c4b5fd; text-align:center; letter-spacing:0.5px">PIPELINE 1 — GÖRSEL ANALİZ</div>
+        <div class="box" style="background:#1a0a3d; border-color:#7c3aed">
+          <span class="box-icon">🔍</span>
+          <span class="box-title">Vision Agent</span>
+          <span class="box-sub">YOLOv8 · Singleton cache<br>COCO food filtresi<br>conf ≥ 0.40</span>
+          <span class="box-tag">agents/vision_agent.py</span>
+        </div>
+        <div class="box" style="background:#1a0a3d; border-color:#7c3aed">
+          <span class="box-icon">🌍</span>
+          <span class="box-title">Ingredient Translator</span>
+          <span class="box-sub">EN → TR · 80+ sözlük<br>LRU Cache 512 giriş</span>
+          <span class="box-tag">core/ingredient_translator.py</span>
+        </div>
+      </div>
+
+      <!-- Pipeline 2 -->
+      <div style="flex:1; background:#160838; border:1.5px solid #6d28d9; border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:8px;">
+        <div style="font-size:10px; font-weight:800; color:#c4b5fd; text-align:center; letter-spacing:0.5px">PIPELINE 2 — METİN ANALİZİ</div>
+        <div class="box" style="background:#1a0a3d; border-color:#7c3aed">
+          <span class="box-icon">🔤</span>
+          <span class="box-title">Ingredient Translator</span>
+          <span class="box-sub">TR metin → parse<br>TR→EN çeviri<br>Google Translate fallback</span>
+          <span class="box-tag">core/ingredient_translator.py</span>
+        </div>
+        <div class="box" style="background:#1a0a3d; border-color:#7c3aed">
+          <span class="box-icon">🔄</span>
+          <span class="box-title">Paralel API Çağrısı</span>
+          <span class="box-sub">Spoonacular + TheMealDB<br>aynı anda çalışır</span>
+          <span class="box-tag">ThreadPoolExecutor</span>
+        </div>
+      </div>
+
+      <!-- Pipeline 3 -->
+      <div style="flex:1; background:#160838; border:1.5px solid #6d28d9; border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:8px;">
+        <div style="font-size:10px; font-weight:800; color:#c4b5fd; text-align:center; letter-spacing:0.5px">PIPELINE 3 — HİBRİT (ÇEVRİMDIŞI)</div>
+        <div class="box" style="background:#1a0a3d; border-color:#7c3aed">
+          <span class="box-icon">🔍</span>
+          <span class="box-title">Vision Agent</span>
+          <span class="box-sub">YOLO görsel tespit<br>Yerel PyTorch CPU</span>
+          <span class="box-tag">agents/vision_agent.py</span>
+        </div>
+        <div class="box" style="background:#1a0a3d; border-color:#a855f7">
+          <span class="box-icon">🤖</span>
+          <span class="box-title">NLP Agent</span>
+          <span class="box-sub">Llama GGUF · Yerel<br>Few-shot · max 2 retry<br>✅ İnternet gerekmez</span>
+          <span class="box-tag">agents/nlp_agent.py</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ok: AI → Dış Servisler (çift yönlü) -->
+  <div class="connector">
+    <div class="connector-line"></div>
+    <div class="connector-label">↕ REST API · HTTPS · JSON · Pipeline 1 &amp; 2 için (Pipeline 3 gerekmez)</div>
+    <div class="connector-line"></div>
+    <div class="connector-arrow">▼</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       KATMAN 4 — DIŞ SERVİSLER
+  ══════════════════════════════════════════════════ -->
+  <div class="layer layer-ext">
+    <span class="layer-label">Katman 4 · Dış Servisler — 3rd Party APIs</span>
+    <div class="layer-row">
+      <div class="box box-wide">
+        <span class="box-icon">🥘</span>
+        <span class="box-title">Spoonacular API</span>
+        <span class="box-sub">
+          365.000+ tarif veritabanı<br>
+          findByIngredients · complexSearch<br>
+          Beslenme bilgisi · Diyet filtresi
+        </span>
+        <span class="box-tag">api.spoonacular.com</span>
+      </div>
+      <div class="box box-wide">
+        <span class="box-icon">🍽️</span>
+        <span class="box-title">TheMealDB API</span>
+        <span class="box-sub">
+          Ücretsiz tarif veritabanı<br>
+          Türk mutfağı araması<br>
+          Spoonacular kota dolunca devreye girer
+        </span>
+        <span class="box-tag">themealdb.com · Fallback</span>
+      </div>
+      <div class="box box-wide">
+        <span class="box-icon">🌐</span>
+        <span class="box-title">Google Translate</span>
+        <span class="box-sub">
+          deep-translator wrapper<br>
+          EN ↔ TR çeviri<br>
+          LRU Cache ile önbellek (512 giriş)
+        </span>
+        <span class="box-tag">translate.googleapis.com</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ok: Orchestrator → Veri -->
+  <div class="connector">
+    <div class="connector-line"></div>
+    <div class="connector-label">💾 SQLAlchemy ORM · MySQL Driver (PyMySQL) · JWT blacklist</div>
+    <div class="connector-line"></div>
+    <div class="connector-arrow">▼</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       KATMAN 5 — VERİ KATMANI
+  ══════════════════════════════════════════════════ -->
+  <div class="layer layer-data">
+    <span class="layer-label">Katman 5 · Veri Katmanı — MySQL 8.4 · SQLAlchemy 2.0</span>
+    <div class="layer-row">
+      <div class="box">
+        <span class="box-icon">👤</span>
+        <span class="box-title">users</span>
+        <span class="box-sub">kullanici_adi<br>sifre_hash<br>dietary_prefs</span>
+        <span class="box-tag">PBKDF2-SHA256</span>
+      </div>
+      <div class="box">
+        <span class="box-icon">❤️</span>
+        <span class="box-title">favorites</span>
+        <span class="box-sub">user_id · recipe_id<br>recipe_isim<br>kaydedilme_tarihi</span>
+        <span class="box-tag">FK → users</span>
+      </div>
+      <div class="box">
+        <span class="box-icon">📅</span>
+        <span class="box-title">meal_plans</span>
+        <span class="box-sub">tarih · ogun<br>recipe_isim<br>kahvalti/ogle/aksam</span>
+        <span class="box-tag">FK → users</span>
+      </div>
+      <div class="box">
+        <span class="box-icon">⭐</span>
+        <span class="box-title">recipe_ratings</span>
+        <span class="box-sub">recipe_id · puan<br>1 – 5 yıldız<br>tarih</span>
+        <span class="box-tag">FK → users</span>
+      </div>
+      <div class="box">
+        <span class="box-icon">🔍</span>
+        <span class="box-title">search_history</span>
+        <span class="box-sub">sorgu · mod<br>metin / gorsel<br>tarih</span>
+        <span class="box-tag">FK → users</span>
+      </div>
+      <div class="box">
+        <span class="box-icon">🔑</span>
+        <span class="box-title">revoked_tokens</span>
+        <span class="box-sub">token (UNIQUE)<br>iptal_tarihi<br>JWT blacklist</span>
+        <span class="box-tag">Auth Güvenlik</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       DOCKER SARGI
+  ══════════════════════════════════════════════════ -->
+  <div style="margin-top: 20px; border: 2px dashed #1e3a5f; border-radius:16px; padding:18px 22px; background:rgba(30,58,95,0.08)">
+    <div style="font-size:10px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase; color:#60a5fa; margin-bottom:14px; display:flex; align-items:center; gap:8px;">
+      <span style="font-size:18px">🐳</span> DOCKER COMPOSE — Servis İzolasyonu &amp; Orkestrasyon
+    </div>
+    <div class="layer-row">
+      <div class="box layer-docker" style="flex:1; background:#001428; border-color:#3b82f6; color:#bfdbfe">
+        <span class="box-icon">🖥️</span>
+        <span class="box-title">backend container</span>
+        <span class="box-sub">Python 3.12 slim<br>Port: 8000<br>Volume: ./models</span>
+        <span class="box-tag" style="background:#1e3a8a; color:#93c5fd">Dockerfile</span>
+      </div>
+      <div class="box layer-docker" style="flex:1; background:#001428; border-color:#3b82f6; color:#bfdbfe">
+        <span class="box-icon">🗄️</span>
+        <span class="box-title">mysql container</span>
+        <span class="box-sub">MySQL 8.4<br>Port: 3306<br>Volume: ecochef_mysql</span>
+        <span class="box-tag" style="background:#1e3a8a; color:#93c5fd">Health Check</span>
+      </div>
+      <div class="box layer-docker" style="flex:1; background:#001428; border-color:#3b82f6; color:#bfdbfe">
+        <span class="box-icon">📱</span>
+        <span class="box-title">mobile container</span>
+        <span class="box-sub">Node 20 slim<br>Port: 8081, 19000-19002<br>Metro Bundler</span>
+        <span class="box-tag" style="background:#1e3a8a; color:#93c5fd">Expo Start</span>
+      </div>
+      <div class="box layer-docker" style="flex:0.8; background:#001428; border-color:#3b82f6; color:#bfdbfe">
+        <span class="box-icon">🌐</span>
+        <span class="box-title">ecochef_network</span>
+        <span class="box-sub">Bridge driver<br>Servisler isimle<br>birbirini bulur</span>
+        <span class="box-tag" style="background:#1e3a8a; color:#93c5fd">Internal DNS</span>
+      </div>
+    </div>
+
+    <!-- Model dosyaları -->
+    <div class="layer-row" style="margin-top:10px">
+      <div class="box" style="flex:1; background:#001020; border:1.5px solid #2d4a7a; color:#93c5fd; border-radius:8px; flex-direction:row; justify-content:center; gap:20px; padding:10px 16px">
+        <span style="font-size:12px">💾 <strong>models/</strong> volume mount</span>
+        <span style="font-size:11px; opacity:0.7">yolov8n.pt — YOLO v8 model ağırlıkları (~6MB)</span>
+        <span style="font-size:11px; opacity:0.7">model.gguf — Llama yerel LLM (~4GB)</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Legend ── -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#1d4ed8"></div> Kullanıcı / Sunum</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div> API Katmanı</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#7c3aed"></div> AI / İş Mantığı</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div> Dış Servisler</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#0d9488"></div> Veri Katmanı</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3b82f6; border:1px dashed #60a5fa"></div> Docker İzolasyonu</div>
+</div>
+
+</body>
+</html>

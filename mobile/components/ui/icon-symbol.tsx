@@ -19,6 +19,12 @@ const MAPPING = {
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
   'bolt.fill': 'offline-bolt',
+  'heart.fill': 'favorite',
+  'cart.fill': 'shopping-cart',
+  'calendar': 'calendar-today',
+  'person.fill': 'person',
+  'camera.fill': 'camera-alt',
+  'safari.fill': 'explore',
 } as IconMapping;
 
 /**

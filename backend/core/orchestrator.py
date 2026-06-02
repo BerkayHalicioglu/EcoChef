@@ -5,16 +5,21 @@ Agent'ları ve connector'ları koordine eden merkezi yönetici katman.
 main.py endpoint'leri doğrudan agent'lara değil, buraya bağlanır.
 
 Pipeline akışları:
-  1. image_pipeline  → VisionAgent → SpoonacularConnector
-  2. text_pipeline   → NLPAgent
-  3. hybrid_pipeline → VisionAgent → NLPAgent (Spoonacular yerine yerel model)
+  1. image_pipeline  → VisionAgent → Spoonacular
+  2. text_pipeline   → parse+translate → Spoonacular + TheMealDB (paralel)
+  3. hybrid_pipeline → VisionAgent → NLPAgent (çevrimdışı mod)
 """
 
 from dataclasses import dataclass
 
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+
 from agents.nlp_agent import NLPAgent
 from agents.vision_agent import VisionAgent
 from connectors.spoonacular import find_recipes_by_ingredients
+from connectors.themealdb import search_by_ingredient
+from core.ingredient_translator import parse_and_translate_tr_ingredients, translate_list
 from core.logger import get_logger, log_duration
 
 log = get_logger(__name__)
@@ -56,18 +61,30 @@ class EcoChefOrchestrator:
     # --- Pipeline 1: Görsel → Spoonacular ---------------------------------- #
 
     @staticmethod
-    def image_pipeline(image_bytes: bytes, recipe_count: int = 3) -> ImagePipelineResult:
+    def image_pipeline(
+        image_bytes: bytes,
+        recipe_count: int = 3,
+        diet: str | None = None,
+        max_calories: int | None = None,
+        min_protein: int | None = None,
+        max_carbs: int | None = None,
+        max_fat: int | None = None,
+    ) -> ImagePipelineResult:
         """
-        Görüntüden malzeme tespit eder, Spoonacular'dan tarif çeker.
+        Görüntüden malzeme tespit eder, önce Spoonacular sonra TheMealDB'den tarif çeker.
 
         Raises:
             ValueError: Görüntüde malzeme tespit edilemezse.
-            ConnectionError: Spoonacular API erişilemezse.
+            ConnectionError: Her iki API de erişilemezse.
         """
         log.info("image_pipeline started | image_size=%d bytes", len(image_bytes))
 
-        with log_duration(log, "VisionAgent.detect"):
-            ingredients = VisionAgent.detect(image_bytes)
+        try:
+            with log_duration(log, "VisionAgent.detect"):
+                ingredients = VisionAgent.detect(image_bytes)
+        except Exception as e:
+            log.error("image_pipeline | VisionAgent failed: %s", e)
+            raise ValueError(f"Görüntü işlenirken hata oluştu: {e}") from e
 
         if not ingredients:
             log.warning("image_pipeline | no ingredients detected")
@@ -75,37 +92,138 @@ class EcoChefOrchestrator:
 
         log.info("image_pipeline | detected=%s", ingredients)
 
-        with log_duration(log, "Spoonacular.find_recipes"):
-            recipes = find_recipes_by_ingredients(ingredients, count=recipe_count)
+        recipes: list[dict] = []
+        spoon_error: Exception | None = None
+
+        # 1. Spoonacular dene
+        try:
+            with log_duration(log, "Spoonacular.find_recipes"):
+                recipes = find_recipes_by_ingredients(
+                    ingredients, count=recipe_count, diet=diet,
+                    max_calories=max_calories, min_protein=min_protein,
+                    max_carbs=max_carbs, max_fat=max_fat,
+                )
+            for r in recipes:
+                r.setdefault("kaynak", "spoonacular")
+            log.info("image_pipeline | Spoonacular recipes=%d", len(recipes))
+        except ConnectionError as e:
+            spoon_error = e
+            log.warning("image_pipeline | Spoonacular failed: %s — trying TheMealDB", e)
+
+        # 2. Spoonacular başarısız veya boş → TheMealDB ile dene
+        if not recipes:
+            try:
+                with log_duration(log, "TheMealDB.search_by_ingredient"):
+                    recipes = search_by_ingredient(ingredients[0], recipe_count)
+                log.info("image_pipeline | TheMealDB recipes=%d", len(recipes))
+            except Exception as meal_e:
+                log.error("image_pipeline | TheMealDB also failed: %s", meal_e)
+                if spoon_error:
+                    raise ConnectionError(
+                        f"Tarif API'lerine ulaşılamadı — "
+                        f"Spoonacular: {spoon_error}, TheMealDB: {meal_e}"
+                    )
 
         log.info("image_pipeline completed | ingredients=%d recipes=%d",
                  len(ingredients), len(recipes))
 
         return ImagePipelineResult(
-            detected_ingredients=ingredients,
+            detected_ingredients=translate_list(ingredients),
             recipes=recipes,
             message=f"{len(ingredients)} malzeme tespit edildi, {len(recipes)} tarif bulundu.",
         )
 
-    # --- Pipeline 2: Metin → NLP ------------------------------------------ #
+    # --- Pipeline 2: Metin → Spoonacular (NLP fallback) ------------------- #
 
     @staticmethod
-    def text_pipeline(user_request: str) -> TextPipelineResult:
+    def text_pipeline(
+        user_request: str,
+        recipe_count: int = 3,
+        diet: str | None = None,
+        max_calories: int | None = None,
+        min_protein: int | None = None,
+        max_carbs: int | None = None,
+        max_fat: int | None = None,
+    ) -> TextPipelineResult:
         """
-        Serbest metin isteğini NLP agent'ına iletir ve öneri listesi döner.
+        Türkçe malzeme metnini ayrıştırır, İngilizceye çevirir ve
+        Spoonacular + TheMealDB'den paralel olarak gerçek ID'li tarifler çeker.
 
         Raises:
-            FileNotFoundError: LLM model dosyası yoksa.
-            ValueError: Model çıktısı JSON parse edilemezse.
+            ConnectionError: Her iki API de erişilemezse.
         """
         log.info("text_pipeline started | request_len=%d", len(user_request))
 
-        with log_duration(log, "NLPAgent.suggest"):
-            suggestions = NLPAgent.suggest(user_request)
+        # 1. Türkçe metni → İngilizce malzeme listesi
+        with log_duration(log, "ingredient_parsing"):
+            en_ingredients = parse_and_translate_tr_ingredients(user_request)
 
-        log.info("text_pipeline completed | suggestions=%d", len(suggestions))
+        log.info("text_pipeline | parsed_ingredients=%s", en_ingredients)
 
-        return TextPipelineResult(suggestions=suggestions)
+        if not en_ingredients:
+            log.warning("text_pipeline | no ingredients parsed from input")
+            return TextPipelineResult(suggestions=[])
+
+        # 2. Spoonacular + TheMealDB paralel sorgu
+        spoon_recipes: list[dict] = []
+        meal_recipes: list[dict] = []
+        api_errors: list[str] = []
+
+        # Her thread kendi context kopyasını alır (ContextVar aynı anda girilemez)
+        ctx_spoon = copy_context()
+        ctx_meal = copy_context()
+
+        def _spoon() -> list[dict]:
+            return ctx_spoon.run(
+                find_recipes_by_ingredients,
+                en_ingredients, recipe_count, diet,
+                max_calories, min_protein, max_carbs, max_fat,
+            )
+
+        def _meal() -> list[dict]:
+            return ctx_meal.run(search_by_ingredient, en_ingredients[0], recipe_count)
+
+        with log_duration(log, "parallel_api_fetch"):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                spoon_fut = executor.submit(_spoon)
+                meal_fut = executor.submit(_meal)
+
+                try:
+                    spoon_recipes = spoon_fut.result()
+                    log.info("text_pipeline | Spoonacular recipes=%d", len(spoon_recipes))
+                except Exception as e:
+                    api_errors.append(f"Spoonacular: {e}")
+                    log.warning("text_pipeline | Spoonacular failed: %s", e)
+
+                try:
+                    meal_recipes = meal_fut.result()
+                    log.info("text_pipeline | TheMealDB recipes=%d", len(meal_recipes))
+                except Exception as e:
+                    api_errors.append(f"TheMealDB: {e}")
+                    log.warning("text_pipeline | TheMealDB failed: %s", e)
+
+        if api_errors and not spoon_recipes and not meal_recipes:
+            raise ConnectionError(f"Tarif API'lerine ulaşılamadı: {'; '.join(api_errors)}")
+
+        def _to_suggestion(r: dict, kaynak: str = "spoonacular") -> dict:
+            return {
+                "id": r.get("id"),
+                "isim": r.get("isim", ""),
+                "gorsel": str(r["gorsel"]) if r.get("gorsel") else None,
+                "neden": "",
+                "kullanilan_malzemeler": r.get("kullanilan_malzemeler", []),
+                "eksik_malzemeler": r.get("eksik_malzemeler", []),
+                "beslenme": r.get("beslenme"),
+                "kaynak": r.get("kaynak", kaynak),
+            }
+
+        combined = (
+            [_to_suggestion(r, "spoonacular") for r in spoon_recipes]
+            + [_to_suggestion(r, "themealdb") for r in meal_recipes]
+        )
+
+        log.info("text_pipeline completed | total=%d", len(combined))
+        return TextPipelineResult(suggestions=combined)
 
     # --- Pipeline 3: Görsel → NLP (Spoonacular'sız hibrit) ----------------- #
 
@@ -121,8 +239,12 @@ class EcoChefOrchestrator:
         """
         log.info("hybrid_pipeline started | image_size=%d bytes", len(image_bytes))
 
-        with log_duration(log, "VisionAgent.detect"):
-            ingredients = VisionAgent.detect(image_bytes)
+        try:
+            with log_duration(log, "VisionAgent.detect"):
+                ingredients = VisionAgent.detect(image_bytes)
+        except Exception as e:
+            log.error("hybrid_pipeline | VisionAgent failed: %s", e)
+            raise ValueError(f"Görüntü işlenirken hata oluştu: {e}") from e
 
         if not ingredients:
             log.warning("hybrid_pipeline | no ingredients detected")
@@ -130,7 +252,9 @@ class EcoChefOrchestrator:
 
         log.info("hybrid_pipeline | detected=%s", ingredients)
 
-        prompt = f"Elimde şu malzemeler var: {', '.join(ingredients)}. Ne pişirebilirim?"
+        turkish_ingredients = translate_list(ingredients)
+        log.info("hybrid_pipeline | translated=%s", turkish_ingredients)
+        prompt = ", ".join(turkish_ingredients)
 
         with log_duration(log, "NLPAgent.suggest"):
             suggestions = NLPAgent.suggest(prompt)

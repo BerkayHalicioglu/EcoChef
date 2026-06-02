@@ -3,6 +3,7 @@ import numpy as np
 from ultralytics import YOLO
 
 from core.config import settings
+from core.ingredient_translator import is_food_class
 from core.logger import get_logger
 
 log = get_logger(__name__)
@@ -27,7 +28,11 @@ class VisionAgent:
     @classmethod
     def detect(cls, image_bytes: bytes) -> list[str]:
         """
-        Ham görüntü byte'larını alır, tespit edilen benzersiz nesne isimlerini döner.
+        Ham görüntü byte'larını alır, tespit edilen benzersiz malzeme isimlerini döner.
+
+        Filtreler:
+          - Confidence eşiği (settings.yolo_confidence) altındaki tespitler atılır.
+          - settings.yolo_food_only=True ise yalnızca yiyecek sınıfları döner.
 
         Args:
             image_bytes: UploadFile'dan okunan ham byte verisi.
@@ -39,15 +44,23 @@ class VisionAgent:
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
         model = cls._get_model()
-        results = model(img)
+        results = model(img, conf=settings.yolo_confidence, verbose=False)
 
         detected: list[str] = []
         for r in results:
             for box in r.boxes:
+                conf = float(box.conf[0])
                 class_id = int(box.cls[0])
-                detected.append(model.names[class_id])
+                name = model.names[class_id]
+
+                if settings.yolo_food_only and not is_food_class(name):
+                    log.debug("VisionAgent.detect | skipped non-food class=%s conf=%.2f", name, conf)
+                    continue
+
+                detected.append(name)
+                log.debug("VisionAgent.detect | accepted class=%s conf=%.2f", name, conf)
 
         unique = list(set(detected))
-        log.debug("VisionAgent.detect | raw=%d unique=%d items=%s",
-                  len(detected), len(unique), unique)
+        log.info("VisionAgent.detect | conf_threshold=%.2f raw=%d unique=%d items=%s",
+                 settings.yolo_confidence, len(detected), len(unique), unique)
         return unique

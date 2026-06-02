@@ -1,9 +1,10 @@
+import Feather from '@expo/vector-icons/Feather';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   ScrollView,
   StyleSheet,
@@ -12,78 +13,145 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { AnimatedButton } from '@/components/AnimatedButton';
+import { GlassCard } from '@/components/GlassCard';
+import { GlassScreen } from '@/components/GlassScreen';
+import { Toast } from '@/components/Toast';
+import { RecipeSkeleton } from '@/components/RecipeSkeleton';
+import { PlanEkleModal } from '@/components/PlanEkleModal';
+import { useGlass } from '@/context/GlassContext';
+import { useLocale } from '@/context/I18nContext';
+import { type GlassTokens } from '@/constants/glass';
+import { useAuth } from '@/context/AuthContext';
+import { useFavorites } from '@/hooks/use-favorites';
+import { useMealPlan } from '@/hooks/use-meal-plan';
+import { useRecipeCache } from '@/hooks/use-recipe-cache';
+import { useShoppingList } from '@/hooks/use-shopping-list';
+import { useToast } from '@/hooks/use-toast';
+import { useSearchHistory } from '@/hooks/use-search-history';
+import { usePersonalizedSuggestions } from '@/hooks/use-personalized-suggestions';
 
-const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? 'http://localhost:8000';
+const DIYET_SECENEKLERI = [
+  { labelKey: 'home.diet.all', deger: null },
+  { labelKey: 'home.diet.vegetarian', deger: 'vegetarian' },
+  { labelKey: 'home.diet.vegan', deger: 'vegan' },
+  { labelKey: 'home.diet.glutenFree', deger: 'gluten free' },
+];
+
+type BesinFiltre = { labelKey: string; maxCalories?: number; minProtein?: number; maxCarbs?: number };
+const BESIN_FILTRELERI: BesinFiltre[] = [
+  { labelKey: 'home.filter.lowCalorie', maxCalories: 400 },
+  { labelKey: 'home.filter.highProtein', minProtein: 25 },
+  { labelKey: 'home.filter.lowCarb', maxCarbs: 20 },
+  { labelKey: 'home.filter.light', maxCalories: 300 },
+];
+
+import { agHatasiMesaji, BASE_URL, langHeaders, NGROK_HEADER, parseHata } from '@/utils/api';
 
 type Tarif = {
-  id?: number;
-  isim: string;
-  gorsel?: string;
-  kullanilan_malzemeler?: string[];
-  eksik_malzemeler?: string[];
-  neden?: string;
+  id?: number; isim: string; gorsel?: string;
+  kullanilan_malzemeler?: string[]; eksik_malzemeler?: string[]; neden?: string;
+  beslenme?: { kalori?: number; protein_g?: number; karbonhidrat_g?: number; yag_g?: number } | null;
+  kaynak?: string;
 };
+type GorselSonuc = { tespit_edilen_malzemeler: string[]; bulunan_tarifler: Tarif[] };
+type MetinSonuc = { sonuclar: Tarif[] };
 
-type GorselSonuc = {
-  tespit_edilen_malzemeler: string[];
-  bulunan_tarifler: Tarif[];
-};
-
-type MetinSonuc = {
-  sonuclar: Tarif[];
-};
-
-function TarifKarti({ tarif, onPress }: { tarif: Tarif; onPress: () => void }) {
+function TarifKarti({ tarif, onPress, favoriMi, onFavoriToggle, onEksikEkle, onPlanEkle, styles }: {
+  tarif: Tarif; onPress: () => void; favoriMi: boolean;
+  onFavoriToggle: () => void; onEksikEkle: (m: string[]) => void;
+  onPlanEkle: () => void; styles: ReturnType<typeof makeStyles>;
+}) {
+  const G = useGlass();
   const [gorselYuklendi, setGorselYuklendi] = useState(false);
 
   return (
-    <TouchableOpacity style={styles.tarifKart} onPress={onPress} activeOpacity={0.85}>
-      {/* Görsel + placeholder */}
-      <View style={styles.tarifGorselKutu}>
-        {!gorselYuklendi && (
-          <View style={styles.tarifPlaceholder}>
-            <Text style={styles.tarifPlaceholderIkon}>🍽</Text>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.92} style={styles.tarifKartContainer}>
+      <GlassCard style={styles.tarifKart}>
+        <View style={styles.tarifGorselKutu}>
+          {!gorselYuklendi && (
+            <View style={styles.tarifPlaceholder}>
+              <Feather name="book-open" size={44} color={G.primary} />
+            </View>
+          )}
+          {tarif.gorsel && (
+            <Image
+              source={{ uri: tarif.gorsel }}
+              style={[styles.tarifGorsel, !gorselYuklendi && styles.gorselGizli]}
+              onLoad={() => setGorselYuklendi(true)}
+              onError={() => setGorselYuklendi(true)}
+            />
+          )}
+          <TouchableOpacity style={styles.favoriButon} onPress={onFavoriToggle}>
+            <Feather name="heart" size={18} color={favoriMi ? '#EF7B6B' : G.textLight} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.tarifIcerik}>
+          <Text style={styles.tarifIsim} numberOfLines={2}>{tarif.isim}</Text>
+          {tarif.neden && <Text style={styles.tarifNeden} numberOfLines={2}>{tarif.neden}</Text>}
+
+          {tarif.beslenme?.kalori != null && (
+            <View style={styles.beslenmeChipSatiri}>
+              <View style={styles.beslenmeChip}>
+                <Feather name="zap" size={10} color={G.accent} />
+                <Text style={styles.beslenmeChipMetni}>{tarif.beslenme.kalori} kcal</Text>
+              </View>
+              {tarif.beslenme.protein_g != null && (
+                <View style={styles.beslenmeChip}>
+                  <Feather name="trending-up" size={10} color={G.accent} />
+                  <Text style={styles.beslenmeChipMetni}>{tarif.beslenme.protein_g}g</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          <View style={styles.tarifAlt}>
+            {(tarif.kullanilan_malzemeler ?? []).length > 0 && (
+              <View style={styles.malzemeChip}>
+                <Feather name="check-circle" size={11} color={G.primary} />
+                <Text style={styles.malzemeChipMetni}>{tarif.kullanilan_malzemeler!.length}</Text>
+              </View>
+            )}
+            {(tarif.eksik_malzemeler ?? []).length > 0 && (
+              <TouchableOpacity
+                style={[styles.malzemeChip, styles.eksikChip]}
+                onPress={() => onEksikEkle(tarif.eksik_malzemeler!)}
+              >
+                <Feather name="shopping-cart" size={11} color={G.accent} />
+                <Text style={styles.eksikChipMetni}>{tarif.eksik_malzemeler!.length}</Text>
+              </TouchableOpacity>
+            )}
           </View>
-        )}
-        {tarif.gorsel && (
-          <Image
-            source={{ uri: tarif.gorsel }}
-            style={[styles.tarifGorsel, !gorselYuklendi && styles.gorselGizli]}
-            onLoad={() => setGorselYuklendi(true)}
-            onError={() => setGorselYuklendi(true)}
-          />
-        )}
-      </View>
 
-      <Text style={styles.tarifIsim}>{tarif.isim}</Text>
-
-      {tarif.neden && (
-        <Text style={styles.tarifNeden}>{tarif.neden}</Text>
-      )}
-
-      {(tarif.kullanilan_malzemeler ?? []).length > 0 && (
-        <View style={styles.malzemeSatiri}>
-          <Text style={styles.malzemeEtiket}>✅ Elinizde var:</Text>
-          <Text style={styles.malzemeListe}>{tarif.kullanilan_malzemeler!.join(', ')}</Text>
+          <View style={styles.tarifButonSatiri}>
+            <TouchableOpacity style={styles.planEkleBtn} onPress={onPlanEkle}>
+              <Feather name="calendar" size={15} color={G.primary} />
+            </TouchableOpacity>
+            {tarif.id && <Text style={styles.detayLink}>›</Text>}
+          </View>
         </View>
-      )}
-
-      {(tarif.eksik_malzemeler ?? []).length > 0 && (
-        <View style={styles.malzemeSatiri}>
-          <Text style={styles.eksikEtiket}>🛒 Eksik:</Text>
-          <Text style={styles.malzemeListe}>{tarif.eksik_malzemeler!.join(', ')}</Text>
-        </View>
-      )}
-
-      {tarif.id && (
-        <Text style={styles.detayLink}>Tarifi görüntüle →</Text>
-      )}
+      </GlassCard>
     </TouchableOpacity>
   );
 }
 
 export default function HomeScreen() {
   const router = useRouter();
+  const G = useGlass();
+  const { t, locale } = useLocale();
+  const styles = useMemo(() => makeStyles(G), [G]);
+  const { canliMalzemeler } = useLocalSearchParams<{ canliMalzemeler?: string }>();
+  const { kullaniciAdi } = useAuth();
+  const { favoriEkle, favoriKaldir, favoriMi } = useFavorites();
+  const { planEkle } = useMealPlan();
+  const { sonGirdi, kaydet: cacheKaydet } = useRecipeCache();
+  const { ekle: alisverisEkle } = useShoppingList();
+  const { toast, goster } = useToast();
+  const { sonBes, kaydet: gecmisKaydet } = useSearchHistory();
+  const { oneriler: kisiselOneriler, topMalzemeler, yukleniyor: kisiselYukleniyor } = usePersonalizedSuggestions();
+  const [planModalGorunur, setPlanModalGorunur] = useState(false);
+  const [planModalTarif, setPlanModalTarif] = useState<Tarif | null>(null);
   const [secilenGorsel, setSecilenGorsel] = useState<string | null>(null);
   const [kullaniciMetni, setKullaniciMetni] = useState('');
   const [gorselYukleniyor, setGorselYukleniyor] = useState(false);
@@ -91,254 +159,436 @@ export default function HomeScreen() {
   const [tespitEdilenMalzemeler, setTespitEdilenMalzemeler] = useState<string[]>([]);
   const [tarifler, setTarifler] = useState<Tarif[]>([]);
   const [mod, setMod] = useState<'gorsel' | 'metin' | null>(null);
+  const [onbellek, setOnbellek] = useState(false);
+  const [seciliDiyet, setSeciliDiyet] = useState<string | null>(null);
+  const [seciliBesin, setSeciliBesin] = useState<BesinFiltre | null>(null);
+  const [aktifTab, setAktifTab] = useState<'gorsel' | 'metin'>('metin');
+  const islenmisMalzemeler = useRef<string | null>(null);
+  const toggleGenislik = useRef(0);
+  const slideX = useSharedValue(0);
+  const slideStyle = useAnimatedStyle(() => ({ transform: [{ translateX: slideX.value }] }));
+
+  useEffect(() => {
+    const metin = typeof canliMalzemeler === 'string' ? canliMalzemeler.trim() : '';
+    if (metin && metin !== islenmisMalzemeler.current) {
+      islenmisMalzemeler.current = metin;
+      setKullaniciMetni(metin);
+      setAktifTab('metin');
+      metinAnalizEtIle(metin);
+    }
+  }, [canliMalzemeler]);
 
   const gorselSec = async (kaynak: 'galeri' | 'kamera') => {
-    const izin =
-      kaynak === 'kamera'
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (!izin.granted) {
-      Alert.alert('İzin Gerekli', `${kaynak === 'kamera' ? 'Kamera' : 'Galeri'} erişim izni verilmedi.`);
-      return;
-    }
-
-    const sonuc =
-      kaynak === 'kamera'
-        ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.8 })
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3], quality: 0.8 });
-
+    const izin = kaynak === 'kamera'
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!izin.granted) { goster(t('home.permissionDenied'), 'hata'); return; }
+    const sonuc = kaynak === 'kamera'
+      ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.8 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3], quality: 0.8 });
     if (!sonuc.canceled) {
-      setSecilenGorsel(sonuc.assets[0].uri);
+      const uri = sonuc.assets[0].uri;
+      setSecilenGorsel(uri);
       setTarifler([]);
       setTespitEdilenMalzemeler([]);
+      gorselAnalizEtIle(uri);
     }
   };
 
-  const gorselAnalizEt = async () => {
-    if (!secilenGorsel) return;
-    setGorselYukleniyor(true);
-    setMod('gorsel');
-
+  const gorselAnalizEtIle = async (uri: string) => {
+    setGorselYukleniyor(true); setMod('gorsel'); setOnbellek(false);
     const formData = new FormData();
-    formData.append('file', { uri: secilenGorsel, name: 'malzeme.jpg', type: 'image/jpeg' } as any);
-
+    formData.append('file', { uri, name: 'malzeme.jpg', type: 'image/jpeg' } as any);
     try {
-      const response = await fetch(`${BASE_URL}/detect-ingredients/`, {
-        method: 'POST',
-        body: formData,
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      const data: GorselSonuc = await response.json();
-      if (response.ok) {
+      const params = new URLSearchParams();
+      if (seciliDiyet) params.set('diet', seciliDiyet);
+      if (seciliBesin?.maxCalories) params.set('max_calories', String(seciliBesin.maxCalories));
+      if (seciliBesin?.minProtein) params.set('min_protein', String(seciliBesin.minProtein));
+      if (seciliBesin?.maxCarbs) params.set('max_carbs', String(seciliBesin.maxCarbs));
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const res = await fetch(`${BASE_URL}/detect-ingredients/${query}`, { method: 'POST', body: formData, headers: { ...NGROK_HEADER, ...langHeaders(locale), 'Content-Type': 'multipart/form-data' } });
+      if (res.ok) {
+        const data: GorselSonuc = await res.json();
         setTespitEdilenMalzemeler(data.tespit_edilen_malzemeler ?? []);
         setTarifler(data.bulunan_tarifler ?? []);
+        cacheKaydet({ malzemeler: data.tespit_edilen_malzemeler ?? [], tarifler: data.bulunan_tarifler ?? [], mod: 'gorsel' });
+        if ((data.bulunan_tarifler ?? []).length === 0) goster(t('home.noFood'), 'bilgi');
       } else {
-        Alert.alert('Hata', 'Analiz başarısız oldu.');
+        const mesaj = await parseHata(res, 'Görsel analiz başarısız.');
+        goster(mesaj, 'hata');
       }
-    } catch {
-      Alert.alert('Bağlantı Hatası', 'Backend\'e ulaşılamadı.');
-    } finally {
-      setGorselYukleniyor(false);
-    }
+    } catch (err) {
+      if (sonGirdi) { setTarifler(sonGirdi.tarifler as Tarif[]); setOnbellek(true); goster('Çevrimdışı — önbellekten gösteriliyor.', 'bilgi'); }
+      else goster(agHatasiMesaji(err), 'hata');
+    } finally { setGorselYukleniyor(false); }
   };
 
-  const metinAnalizEt = async () => {
-    if (!kullaniciMetni.trim()) return;
-    setMetinYukleniyor(true);
-    setMod('metin');
-    setTespitEdilenMalzemeler([]);
-
+  const metinAnalizEtIle = async (metin: string) => {
+    setMetinYukleniyor(true); setMod('metin'); setTespitEdilenMalzemeler([]); setOnbellek(false);
     try {
-      const response = await fetch(`${BASE_URL}/analyze-text-ingredients/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: kullaniciMetni }),
-      });
-      const data: MetinSonuc = await response.json();
-      if (response.ok) {
+      const body: Record<string, unknown> = { text: metin };
+      if (seciliDiyet) body.diet = seciliDiyet;
+      if (seciliBesin?.maxCalories) body.max_calories = seciliBesin.maxCalories;
+      if (seciliBesin?.minProtein) body.min_protein = seciliBesin.minProtein;
+      if (seciliBesin?.maxCarbs) body.max_carbs = seciliBesin.maxCarbs;
+      const res = await fetch(`${BASE_URL}/analyze-text-ingredients/`, { method: 'POST', headers: { ...NGROK_HEADER, ...langHeaders(locale), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (res.ok) {
+        const data: MetinSonuc = await res.json();
         setTarifler(data.sonuclar ?? []);
+        cacheKaydet({ malzemeler: [], tarifler: data.sonuclar ?? [], mod: 'metin' });
+        if ((data.sonuclar ?? []).length > 0) gecmisKaydet(metin, 'metin');
+        else goster(t('home.noSuggestion'), 'bilgi');
       } else {
-        Alert.alert('Hata', 'NLP analizi başarısız oldu.');
+        const mesaj = await parseHata(res, 'Analiz başarısız.');
+        goster(mesaj, 'hata');
       }
-    } catch {
-      Alert.alert('Bağlantı Hatası', 'Backend\'e ulaşılamadı.');
-    } finally {
-      setMetinYukleniyor(false);
-    }
+    } catch (err) {
+      if (sonGirdi) { setTarifler(sonGirdi.tarifler as Tarif[]); setOnbellek(true); goster('Çevrimdışı — önbellekten gösteriliyor.', 'bilgi'); }
+      else goster(agHatasiMesaji(err), 'hata');
+    } finally { setMetinYukleniyor(false); }
   };
 
-  const sifirla = () => {
-    setSecilenGorsel(null);
-    setKullaniciMetni('');
-    setTarifler([]);
-    setTespitEdilenMalzemeler([]);
-    setMod(null);
-  };
+  const sifirla = () => { setSecilenGorsel(null); setKullaniciMetni(''); setTarifler([]); setTespitEdilenMalzemeler([]); setMod(null); setOnbellek(false); };
+  const yukleniyor = gorselYukleniyor || metinYukleniyor;
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <Text style={styles.baslik}>EcoChef</Text>
-      <Text style={styles.altBaslik}>Mutfağındaki malzemeleri keşfet</Text>
+    <GlassScreen>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
-      {/* --- GÖRSEL BÖLÜMÜ --- */}
-      <View style={styles.kart}>
-        <Text style={styles.bolumBaslik}>📸 Görsel Analiz</Text>
-        {secilenGorsel && (
-          <Image source={{ uri: secilenGorsel }} style={styles.onizleme} />
-        )}
-        <View style={styles.ikiliButon}>
-          <TouchableOpacity style={[styles.buton, styles.butonGri]} onPress={() => gorselSec('galeri')}>
-            <Text style={styles.butonMetni}>🖼 Galeri</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.buton, styles.butonGri]} onPress={() => gorselSec('kamera')}>
-            <Text style={styles.butonMetni}>📷 Kamera</Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.selamlama}>{t('home.greeting', { name: kullaniciAdi ? `, ${kullaniciAdi}` : '' })}</Text>
+            <Text style={styles.altYazi}>{t('home.subtitle')}</Text>
+          </View>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/profile' as any)} style={styles.avatarBtn}>
+            <View style={styles.avatarMini}>
+              <Text style={styles.avatarMiniMetin}>{kullaniciAdi ? kullaniciAdi.slice(0, 1).toUpperCase() : '?'}</Text>
+            </View>
           </TouchableOpacity>
         </View>
-        {secilenGorsel && (
-          <TouchableOpacity
-            style={[styles.buton, styles.butonTuruncu, gorselYukleniyor && styles.butonDisabled]}
-            onPress={gorselAnalizEt}
-            disabled={gorselYukleniyor}
-          >
-            {gorselYukleniyor
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.butonMetni}>Görseli Analiz Et</Text>
-            }
-          </TouchableOpacity>
+
+        {/* Son Aramalar */}
+        {sonBes.length > 0 && (
+          <View style={styles.sonAramaSatiri}>
+            <TouchableOpacity onPress={() => router.push('/search-history' as any)}>
+              <Text style={styles.sonAramaBaslik}>{t('home.recentSearches')}</Text>
+            </TouchableOpacity>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sonAramaChipler}>
+              {sonBes.map((k) => (
+                <TouchableOpacity
+                  key={k.id}
+                  style={styles.sonAramaChip}
+                  onPress={() => { setKullaniciMetni(k.sorgu); setAktifTab('metin'); metinAnalizEtIle(k.sorgu); }}
+                >
+                  <Text style={styles.sonAramaChipMetin} numberOfLines={1}>{k.sorgu}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
         )}
-      </View>
 
-      <View style={styles.ayirac}>
-        <View style={styles.ayiracCizgi} />
-        <Text style={styles.ayiracMetin}>VEYA</Text>
-        <View style={styles.ayiracCizgi} />
-      </View>
+        {/* Sizin İçin Öneriler */}
+        {(kisiselOneriler.length > 0 || kisiselYukleniyor) && (
+          <View style={styles.kisiselKutu}>
+            <View style={styles.kisiselBaslikSatiri}>
+              <Text style={styles.kisiselBaslik}>{t('home.forYou')}</Text>
+              {topMalzemeler.length > 0 && (
+                <Text style={styles.kisiselAlt}>{t('home.basedOn', { items: topMalzemeler.join(', ') })}</Text>
+              )}
+            </View>
+            {kisiselYukleniyor ? (
+              <ActivityIndicator color={G.primary} style={{ marginVertical: 12 }} />
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.kisiselChipler}>
+                {kisiselOneriler.map((oneri, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={styles.kisiselKart}
+                    activeOpacity={0.85}
+                    onPress={() => { setKullaniciMetni(oneri.isim); setAktifTab('metin'); metinAnalizEtIle(oneri.isim); }}
+                  >
+                    <Text style={styles.kisiselKartIsim} numberOfLines={2}>{oneri.isim}</Text>
+                    {oneri.neden && <Text style={styles.kisiselKartNeden} numberOfLines={2}>{oneri.neden}</Text>}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        )}
 
-      {/* --- METİN BÖLÜMÜ --- */}
-      <View style={styles.kart}>
-        <Text style={styles.bolumBaslik}>✍️ Metin ile Öneri Al</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Örn: Evde tavuk, mantar ve soğan var..."
-          placeholderTextColor="#aaa"
-          value={kullaniciMetni}
-          onChangeText={setKullaniciMetni}
-          multiline
-          numberOfLines={3}
-        />
-        <TouchableOpacity
-          style={[styles.buton, styles.butonYesil, metinYukleniyor && styles.butonDisabled]}
-          onPress={metinAnalizEt}
-          disabled={metinYukleniyor}
-        >
-          {metinYukleniyor
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.butonMetni}>Öneri Al</Text>
-          }
-        </TouchableOpacity>
-      </View>
-
-      {/* --- TESPİT EDİLEN MALZEMELER --- */}
-      {tespitEdilenMalzemeler.length > 0 && (
-        <View style={styles.malzemeKutusu}>
-          <Text style={styles.bolumBaslik}>Tespit Edilen Malzemeler</Text>
-          <View style={styles.chipSatiri}>
-            {tespitEdilenMalzemeler.map((malzeme, i) => (
-              <View key={i} style={styles.chip}>
-                <Text style={styles.chipMetni}>{malzeme}</Text>
-              </View>
+        {/* Analiz Sekmeleri */}
+        <GlassCard style={styles.sekmeSarici}>
+          <View
+            style={styles.sekmeToggle}
+            onLayout={(e) => {
+              toggleGenislik.current = e.nativeEvent.layout.width;
+              slideX.value = aktifTab === 'gorsel' ? toggleGenislik.current / 2 : 0;
+            }}
+          >
+            {/* Kayan arkaplan göstergesi */}
+            <Animated.View style={[styles.sekmeIndicator, slideStyle]} />
+            {(['metin', 'gorsel'] as const).map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                style={styles.sekmeBtn}
+                onPress={() => {
+                  setAktifTab(tab);
+                  slideX.value = withTiming(
+                    tab === 'gorsel' ? toggleGenislik.current / 2 : 0,
+                    { duration: 220 }
+                  );
+                }}
+              >
+                <Text style={[styles.sekmeBtnMetin, aktifTab === tab && { color: '#fff' }]}>
+                  {tab === 'metin' ? t('home.textTab') : t('home.imageTab')}
+                </Text>
+              </TouchableOpacity>
             ))}
           </View>
-        </View>
-      )}
 
-      {/* --- SONUÇLAR --- */}
-      {tarifler.length > 0 && (
-        <View style={styles.sonucBolum}>
-          <Text style={styles.sonucBaslik}>
-            {mod === 'gorsel' ? '🍽 Bulunan Tarifler' : '💡 Önerilen Tarifler'}
-          </Text>
-          {tarifler.map((tarif, i) => (
-            <TarifKarti
-              key={i}
-              tarif={tarif}
-              onPress={() => tarif.id
-                ? router.push({ pathname: '/recipe/[id]', params: { id: String(tarif.id), isim: tarif.isim, gorsel: tarif.gorsel ?? '' } })
-                : null
-              }
-            />
+          {aktifTab === 'metin' ? (
+            <View style={styles.sekmeIcerik}>
+              <TextInput
+                style={styles.input}
+                placeholder={t('home.placeholder')}
+                placeholderTextColor={G.textLight}
+                value={kullaniciMetni}
+                onChangeText={setKullaniciMetni}
+                multiline
+                numberOfLines={3}
+              />
+              <AnimatedButton
+                style={metinYukleniyor ? { ...styles.analizBtn, opacity: 0.6 } : styles.analizBtn}
+                onPress={() => kullaniciMetni.trim() && metinAnalizEtIle(kullaniciMetni)}
+                disabled={metinYukleniyor || !kullaniciMetni.trim()}
+              >
+                {metinYukleniyor ? <ActivityIndicator color="#fff" /> : <Text style={styles.analizBtnMetni}>{t('home.analyze')}</Text>}
+              </AnimatedButton>
+            </View>
+          ) : (
+            <View style={styles.sekmeIcerik}>
+              {secilenGorsel && <Image source={{ uri: secilenGorsel }} style={styles.onizleme} />}
+              <View style={styles.ikiliButon}>
+                <AnimatedButton style={styles.ikiliBtnSol} onPress={() => gorselSec('galeri')}>
+                  <Text style={styles.ikiliBtnMetni}>{t('home.gallery')}</Text>
+                </AnimatedButton>
+                <AnimatedButton style={styles.ikiliBtnSol} onPress={() => gorselSec('kamera')}>
+                  <Text style={styles.ikiliBtnMetni}>{t('home.camera')}</Text>
+                </AnimatedButton>
+              </View>
+              {gorselYukleniyor && (
+                <View style={styles.gorselYukleniyor}>
+                  <ActivityIndicator color={G.primary} />
+                  <Text style={styles.gorselYukleniyorMetin}>{t('home.scanning')}</Text>
+                </View>
+              )}
+            </View>
+          )}
+        </GlassCard>
+
+        {/* Diyet Filtreleri */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.diyetScroll} contentContainerStyle={styles.diyetSatiri}>
+          {DIYET_SECENEKLERI.map((d) => (
+            <TouchableOpacity
+              key={d.labelKey}
+              style={seciliDiyet === d.deger ? { ...styles.diyetChip, ...styles.diyetChipAktif } : styles.diyetChip}
+              onPress={() => setSeciliDiyet(d.deger)}
+            >
+              <Text style={seciliDiyet === d.deger ? { ...styles.diyetChipMetin, color: '#fff' } : styles.diyetChipMetin}>
+                {t(d.labelKey)}
+              </Text>
+            </TouchableOpacity>
           ))}
+        </ScrollView>
 
-          <TouchableOpacity style={[styles.buton, styles.butonGri, { marginTop: 8 }]} onPress={sifirla}>
-            <Text style={styles.butonMetni}>🔄 Sıfırla</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Besin Değeri Filtreleri */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.diyetScroll} contentContainerStyle={styles.diyetSatiri}>
+          {BESIN_FILTRELERI.map((b) => {
+            const aktif = seciliBesin?.labelKey === b.labelKey;
+            return (
+              <TouchableOpacity
+                key={b.labelKey}
+                style={aktif ? { ...styles.diyetChip, ...styles.besinChipAktif } : { ...styles.diyetChip, ...styles.besinChip }}
+                onPress={() => setSeciliBesin(aktif ? null : b)}
+              >
+                <Text style={aktif ? { ...styles.diyetChipMetin, color: '#fff' } : { ...styles.diyetChipMetin, color: G.accent }}>
+                  {t(b.labelKey)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Tespit edilen malzemeler */}
+        {tespitEdilenMalzemeler.length > 0 && (
+          <View style={styles.malzemeKutusu}>
+            <Text style={styles.bolumBaslik}>{t('home.detected')}</Text>
+            <View style={styles.chipSatiri}>
+              {tespitEdilenMalzemeler.map((m, i) => (
+                <View key={i} style={styles.malzemeChipGreen}>
+                  <Text style={styles.malzemeChipGreenMetni}>{m}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Yükleniyor */}
+        {yukleniyor && <RecipeSkeleton adet={3} />}
+
+        {/* Sonuçlar */}
+        {!yukleniyor && tarifler.length > 0 && (
+          <View>
+            {onbellek && (
+              <View style={styles.onbellekBanner}>
+                <Text style={styles.onbellekMetin}>{t('home.offline')}</Text>
+              </View>
+            )}
+            <View style={styles.sonucHeader}>
+              <Text style={styles.bolumBaslik}>{mod === 'gorsel' ? t('home.foundRecipes') : t('home.suggestedRecipes')}</Text>
+              <TouchableOpacity onPress={sifirla}>
+                <Text style={styles.sifirlaLink}>{t('home.clear')}</Text>
+              </TouchableOpacity>
+            </View>
+            {tarifler.map((tarif, i) => (
+              <TarifKarti
+                key={i}
+                tarif={tarif}
+                styles={styles}
+                onPress={() => tarif.id ? router.push({ pathname: '/recipe/[id]', params: { id: String(tarif.id), isim: tarif.isim, gorsel: tarif.gorsel ?? '', kaynak: tarif.kaynak ?? 'spoonacular' } }) : null}
+                favoriMi={favoriMi(tarif)}
+                onFavoriToggle={async () => {
+                  if (!kullaniciAdi) { goster(t('home.favLoginPrompt'), 'bilgi'); return; }
+                  const basarili = favoriMi(tarif)
+                    ? await favoriKaldir(tarif)
+                    : await favoriEkle({ id: tarif.id, isim: tarif.isim, gorsel: tarif.gorsel });
+                  if (!basarili) goster(t('home.favError'), 'hata');
+                }}
+                onEksikEkle={(malzemeler) => { alisverisEkle(malzemeler); goster(t('home.addedToCart', { count: malzemeler.length }), 'basari'); }}
+                onPlanEkle={() => {
+                  if (!kullaniciAdi) { goster(t('home.planLoginPrompt'), 'bilgi'); return; }
+                  setPlanModalTarif(tarif); setPlanModalGorunur(true);
+                }}
+              />
+            ))}
+          </View>
+        )}
+      </ScrollView>
+
+      {planModalTarif && (
+        <PlanEkleModal
+          gorunur={planModalGorunur}
+          onKapat={() => setPlanModalGorunur(false)}
+          onEkle={async (tarih, ogun) => {
+            const sonuc = await planEkle({ tarih, ogun, recipe_id: planModalTarif.id, recipe_isim: planModalTarif.isim, recipe_gorsel: planModalTarif.gorsel });
+            goster(sonuc ? t('home.addedToPlan') : t('home.planError'), sonuc ? 'basari' : 'hata');
+          }}
+        />
       )}
-    </ScrollView>
+      <Toast mesaj={toast.mesaj} tip={toast.tip} gorunur={toast.gorunur} />
+    </GlassScreen>
   );
 }
 
-const YESIL = '#2e7d32';
-const TURUNCU = '#e65100';
-const GRI = '#546e7a';
+function makeStyles(G: GlassTokens) {
+  return StyleSheet.create({
+    container: { padding: 20, paddingTop: 56, paddingBottom: 32 },
 
-const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: '#f1f8f1', alignItems: 'center', paddingBottom: 40 },
-  baslik: { fontSize: 36, fontWeight: 'bold', color: YESIL, marginTop: 48, letterSpacing: 1 },
-  altBaslik: { fontSize: 14, color: '#777', marginBottom: 24, marginTop: 4 },
+    // Header
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+    selamlama: { fontSize: 22, fontWeight: '800', color: G.textDark },
+    altYazi: { fontSize: 13, color: G.textMid, marginTop: 2 },
+    avatarBtn: {},
+    avatarMini: { width: 42, height: 42, borderRadius: 21, backgroundColor: G.primary, alignItems: 'center', justifyContent: 'center' },
+    avatarMiniMetin: { color: '#fff', fontSize: 18, fontWeight: '700' },
 
-  kart: {
-    width: '100%', backgroundColor: '#fff', borderRadius: 16, padding: 16,
-    marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 8,
-  },
-  bolumBaslik: { fontSize: 16, fontWeight: '700', color: '#333', marginBottom: 12 },
+    // Sekme toggle
+    sekmeSarici: { marginBottom: 14, padding: 4 },
+    sekmeToggle: { flexDirection: 'row', backgroundColor: G.bgColor, borderRadius: G.radius.lg, padding: 4, marginBottom: 4, position: 'relative' },
+    sekmeIndicator: { position: 'absolute', top: 4, bottom: 4, left: 4, width: '50%', backgroundColor: G.primary, borderRadius: G.radius.md },
+    sekmeBtn: { flex: 1, paddingVertical: 10, borderRadius: G.radius.md, alignItems: 'center', zIndex: 1 },
+    sekmeBtnMetin: { fontSize: 14, fontWeight: '700', color: G.textMid },
+    sekmeIcerik: { padding: 8 },
 
-  onizleme: { width: '100%', height: 200, borderRadius: 12, marginBottom: 12, resizeMode: 'cover' },
+    // Input
+    input: {
+      backgroundColor: G.bgColor, borderWidth: 1, borderColor: G.glassBorder,
+      borderRadius: G.radius.md, padding: 14, marginBottom: 12,
+      minHeight: 80, textAlignVertical: 'top', fontSize: 14, color: G.textDark,
+    },
+    analizBtn: { backgroundColor: G.primary, borderRadius: G.radius.pill, paddingVertical: 14, alignItems: 'center' },
+    analizBtnMetni: { color: '#fff', fontSize: 15, fontWeight: '700' },
 
-  ikiliButon: { flexDirection: 'row', gap: 10, marginBottom: 10 },
-  buton: { flex: 1, padding: 13, borderRadius: 25, alignItems: 'center', justifyContent: 'center', minHeight: 48 },
-  butonGri: { backgroundColor: GRI },
-  butonTuruncu: { backgroundColor: TURUNCU },
-  butonYesil: { backgroundColor: YESIL },
-  butonDisabled: { opacity: 0.6 },
-  butonMetni: { color: '#fff', fontSize: 15, fontWeight: '600' },
+    onizleme: { width: '100%', height: 180, borderRadius: G.radius.md, marginBottom: 12, resizeMode: 'cover' },
+    ikiliButon: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+    ikiliBtnSol: { flex: 1, backgroundColor: G.primaryMuted, borderRadius: G.radius.pill, paddingVertical: 12, alignItems: 'center' },
+    ikiliBtnMetni: { color: G.primary, fontSize: 14, fontWeight: '700' },
 
-  input: {
-    backgroundColor: '#f9f9f9', borderWidth: 1, borderColor: '#ddd',
-    borderRadius: 10, padding: 12, marginBottom: 10, minHeight: 80,
-    textAlignVertical: 'top', fontSize: 14, color: '#333',
-  },
+    // Diyet filtresi
+    diyetScroll: { marginBottom: 16 },
+    diyetSatiri: { gap: 8, paddingRight: 4 },
+    diyetChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: G.radius.pill, backgroundColor: G.glassWhite, borderWidth: 1, borderColor: G.glassBorder },
+    diyetChipAktif: { backgroundColor: G.primary, borderColor: G.primary },
+    besinChip: { borderColor: G.accent, backgroundColor: G.accentMuted },
+    besinChipAktif: { backgroundColor: G.accent, borderColor: G.accent },
 
-  ayirac: { flexDirection: 'row', alignItems: 'center', width: '100%', marginVertical: 4 },
-  ayiracCizgi: { flex: 1, height: 1, backgroundColor: '#ddd' },
-  ayiracMetin: { marginHorizontal: 12, color: '#aaa', fontSize: 12, fontWeight: '600' },
+    kisiselKutu: { marginBottom: 16 },
+    kisiselBaslikSatiri: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 10 },
+    kisiselBaslik: { fontSize: 16, fontWeight: '800', color: G.textDark },
+    kisiselAlt: { fontSize: 11, color: G.textLight, flex: 1 },
+    kisiselChipler: { gap: 10, paddingBottom: 4 },
+    kisiselKart: { width: 150, backgroundColor: G.glassWhite, borderRadius: G.radius.md, borderWidth: 1, borderColor: G.glassBorder, padding: 14, shadowColor: G.shadow.color, shadowOffset: G.shadow.offset, shadowOpacity: G.shadow.opacity, shadowRadius: G.shadow.radius, elevation: G.shadow.elevation },
+    kisiselKartIsim: { fontSize: 13, fontWeight: '700', color: G.primary, marginBottom: 6 },
+    kisiselKartNeden: { fontSize: 11, color: G.textMid, lineHeight: 16 },
 
-  malzemeKutusu: {
-    width: '100%', backgroundColor: '#e8f5e9', borderRadius: 14,
-    padding: 14, marginBottom: 12,
-  },
-  chipSatiri: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  chip: { backgroundColor: YESIL, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
-  chipMetni: { color: '#fff', fontSize: 13, fontWeight: '500' },
+    gorselYukleniyor: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 12 },
+    gorselYukleniyorMetin: { fontSize: 13, color: G.textMid, fontWeight: '500' },
+    beslenmeChipSatiri: { flexDirection: 'row', gap: 6, marginBottom: 6 },
+    beslenmeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: G.accentMuted, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
+    beslenmeChipMetni: { fontSize: 11, color: G.accent, fontWeight: '600' },
 
-  sonucBolum: { width: '100%' },
-  sonucBaslik: { fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 12 },
+    sonAramaSatiri: { marginBottom: 12 },
+    sonAramaBaslik: { fontSize: 12, color: G.textLight, fontWeight: '600', marginBottom: 8 },
+    sonAramaChipler: { gap: 8, paddingBottom: 2 },
+    sonAramaChip: { backgroundColor: G.glassWhite, borderWidth: 1, borderColor: G.glassBorder, borderRadius: G.radius.pill, paddingHorizontal: 14, paddingVertical: 7, maxWidth: 180 },
+    sonAramaChipMetin: { fontSize: 13, color: G.textDark, fontWeight: '500' },
+    diyetChipMetin: { fontSize: 13, color: G.textMid, fontWeight: '600' },
 
-  tarifKart: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 12,
-    elevation: 2, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6,
-  },
-  tarifGorselKutu: { width: '100%', height: 160, borderRadius: 10, marginBottom: 10, overflow: 'hidden', backgroundColor: '#e8f5e9' },
-  tarifGorsel: { width: '100%', height: '100%', resizeMode: 'cover' },
-  gorselGizli: { position: 'absolute', opacity: 0 },
-  tarifPlaceholder: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
-  tarifPlaceholderIkon: { fontSize: 40 },
-  tarifIsim: { fontSize: 17, fontWeight: 'bold', color: YESIL, marginBottom: 4 },
-  detayLink: { fontSize: 13, color: YESIL, fontWeight: '600', marginTop: 10, textAlign: 'right' },
-  tarifNeden: { fontSize: 13, color: '#666', marginBottom: 8, lineHeight: 18 },
-  malzemeSatiri: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
-  malzemeEtiket: { fontSize: 12, fontWeight: '700', color: '#388e3c' },
-  eksikEtiket: { fontSize: 12, fontWeight: '700', color: '#e65100' },
-  malzemeListe: { fontSize: 12, color: '#555', flexShrink: 1 },
-});
+    // Malzeme
+    malzemeKutusu: { marginBottom: 16 },
+    bolumBaslik: { fontSize: 16, fontWeight: '800', color: G.textDark, marginBottom: 10 },
+    chipSatiri: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    malzemeChipGreen: { backgroundColor: G.primaryMuted, paddingHorizontal: 12, paddingVertical: 6, borderRadius: G.radius.pill },
+    malzemeChipGreenMetni: { color: G.primary, fontSize: 13, fontWeight: '600' },
+
+    // Sonuç header
+    sonucHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    sifirlaLink: { fontSize: 13, color: G.accent, fontWeight: '700' },
+    onbellekBanner: { backgroundColor: '#FFF8E1', borderRadius: G.radius.md, padding: 10, marginBottom: 10, borderLeftWidth: 3, borderLeftColor: G.warning },
+    onbellekMetin: { fontSize: 13, color: G.warning, fontWeight: '600' },
+
+    // Tarif kartı
+    tarifKartContainer: { marginBottom: 14 },
+    tarifKart: { overflow: 'hidden' },
+    tarifGorselKutu: { width: '100%', height: 170, backgroundColor: G.glassGreen },
+    tarifGorsel: { width: '100%', height: '100%', resizeMode: 'cover' },
+    gorselGizli: { position: 'absolute', opacity: 0 },
+    tarifPlaceholder: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
+    favoriButon: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(255,255,255,0.90)', borderRadius: 20, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+
+    tarifIcerik: { padding: 14 },
+    tarifIsim: { fontSize: 16, fontWeight: '700', color: G.textDark, marginBottom: 4 },
+    tarifNeden: { fontSize: 13, color: G.textMid, marginBottom: 10, lineHeight: 18 },
+
+    tarifAlt: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
+    malzemeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: G.primaryMuted, paddingHorizontal: 10, paddingVertical: 4, borderRadius: G.radius.pill },
+    malzemeChipMetni: { color: G.primary, fontSize: 12, fontWeight: '600' },
+    eksikChip: { backgroundColor: G.accentMuted },
+    eksikChipMetni: { color: G.accent, fontSize: 12, fontWeight: '600' },
+
+    tarifButonSatiri: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    planEkleBtn: { backgroundColor: G.primaryMuted, paddingHorizontal: 14, paddingVertical: 7, borderRadius: G.radius.pill },
+    detayLink: { fontSize: 13, color: G.textMid, fontWeight: '600' },
+  });
+}

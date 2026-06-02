@@ -1,3 +1,7 @@
+# Node
+node_modules/
+mobile/node_modules/
+
 # Python
 venv/
 __pycache__/
@@ -18,3 +22,13 @@ Thumbs.db
 
 # Gizli dosyalar
 .env
+**/.env
+backend/.env
+mobile/.env
+
+# Docker
+models/*.pt
+models/*.gguf
+
+# SQLite (kullanılmıyor — uygulama MySQL kullanır)
+backend/*.db
