@@ -1,0 +1,99 @@
+{
+  "navbar": {
+    "features": "Özellikler",
+    "howItWorks": "Nasıl Çalışır",
+    "tech": "Teknoloji",
+    "team": "Ekip"
+  },
+  "hero": {
+    "badge": "🌱 Yapay Zeka Destekli Mutfak",
+    "subtitle": "Yapay Zeka Destekli Akıllı Mutfak Asistanınız",
+    "desc": "Buzdolabınızı tarayın, malzemelerinizi yazın — anında kişiselleştirilmiş tarifler alın.",
+    "learnMore": "Daha Fazla ↓",
+    "watchDemo": "Teknolojiyi Keşfet"
+  },
+  "howItWorks": {
+    "title": "Nasıl Çalışır?",
+    "subtitle": "Bir sonraki yemeğinize üç basit adım",
+    "step": "Adım",
+    "steps": [
+      {
+        "title": "Tara veya Yaz",
+        "desc": "Malzemelerinizin fotoğrafını çekin ya da Türkçe/İngilizce yazın."
+      },
+      {
+        "title": "Yapay Zeka Tespit Eder",
+        "desc": "YOLO bilgisayarlı görü, malzemeleri fotoğraftan gerçek zamanlı tanır."
+      },
+      {
+        "title": "Tarifleri Al",
+        "desc": "Spoonacular ve TheMealDB'den gerçek tarifler — çevrilmiş ve kişiselleştirilmiş."
+      }
+    ]
+  },
+  "features": {
+    "title": "Temel Özellikler",
+    "subtitle": "Mutfağınızda ihtiyacınız olan her şey",
+    "items": [
+      { "emoji": "📷", "title": "Görsel Malzeme Tanıma", "desc": "Güven filtreli, fotoğraftan YOLO tabanlı gerçek zamanlı tespit" },
+      { "emoji": "✍️", "title": "Metin Tabanlı Arama", "desc": "Türkçe serbest metin girişi, API sorguları için otomatik İngilizce çeviri" },
+      { "emoji": "📵", "title": "Çevrimdışı Hibrit Mod", "desc": "Yerel LLaMA NLP ile sıfır internet bağlantısıyla Türkçe tarif önerisi" },
+      { "emoji": "📅", "title": "Haftalık Yemek Planı", "desc": "Haftanın her günü için kahvaltı, öğle ve akşam yemeği planlayın" },
+      { "emoji": "🔥", "title": "Kalori Takibi", "desc": "Harris-Benedict formülüyle kişisel günlük kalori hedefi; yemek planındaki alımı takip eder" },
+      { "emoji": "🎯", "title": "Kişiselleştirilmiş Öneri", "desc": "Arama geçmişinizi analiz ederek en çok kullandığınız malzemelere göre tarif önerir" },
+      { "emoji": "⭐", "title": "Tarif Puanlama Sistemi", "desc": "Tarifleri 1–5 yıldız ile puanlayın; her tarifte topluluk ortalamasını görün" },
+      { "emoji": "🛒", "title": "Akıllı Alışveriş Listesi", "desc": "Tek dokunuşla eksik malzeme ekleyin; Migros, Getir, Trendyol ve A101'e doğrudan bağlanın" },
+      { "emoji": "🌍", "title": "İki Dil Desteği", "desc": "Tam Türkçe/İngilizce i18n — arayüz, tarif adları, malzemeler ve talimatlar çevrilir" }
+    ]
+  },
+  "markets": {
+    "title": "Malzemeleri Anında Satın Alın",
+    "subtitle": "Bir malzeme eksik mi? Alışveriş listesi Türkiye'nin en büyük online marketlerine doğrudan bağlanır.",
+    "items": ["Migros", "Getir", "Trendyol", "A101"]
+  },
+  "tech": {
+    "title": "Modern Teknoloji ile İnşa Edildi",
+    "subtitle": "Üretime hazır mimari",
+    "layers": [
+      {
+        "title": "Mobil Katman",
+        "items": ["React Native (Expo)", "expo-router (dosya tabanlı nav)", "Context API + AsyncStorage", "Reanimated animasyonları"]
+      },
+      {
+        "title": "Backend Katmanı",
+        "items": ["Python 3.11 + FastAPI", "SQLite + SQLAlchemy ORM", "JWT auth + token kara liste", "Docker Compose ile dağıtım", "Endpoint başına hız sınırı"]
+      },
+      {
+        "title": "Yapay Zeka & Veri Katmanı",
+        "items": ["YOLO (Ultralytics) — görüntü tespiti", "LLaMA NLP — çevrimdışı tarif önerisi", "Spoonacular API — birincil kaynak", "TheMealDB API — yedek kaynak", "Google Translate — TR→EN malzeme çevirisi"]
+      }
+    ]
+  },
+  "screens": {
+    "title": "Uygulama Ekranları",
+    "subtitle": "13+ ekran — eksiksiz bir mutfak deneyimi",
+    "items": [
+      { "label": "Ana Sayfa", "desc": "Malzeme Girişi" },
+      { "label": "Canlı Tarama", "desc": "Gerçek Zamanlı Kamera" },
+      { "label": "Keşfet", "desc": "Sonuçlar & Detay" },
+      { "label": "Haftalık Plan", "desc": "Yemek Takvimi" },
+      { "label": "Alışveriş", "desc": "Market Entegrasyonu" },
+      { "label": "Profil", "desc": "Ayarlar & İstatistik" }
+    ]
+  },
+  "stats": [
+    { "value": "2",  "label": "YZ Modu",        "sub": "Çevrimiçi + Çevrimdışı" },
+    { "value": "2",  "label": "Tarif API'si",   "sub": "Spoonacular + TheMealDB" },
+    { "value": "13+","label": "Uygulama Ekranı","sub": "Tam deneyim" },
+    { "value": "4",  "label": "Market Bağlantısı", "sub": "Migros · Getir · Trendyol · A101" }
+  ],
+  "team": {
+    "title": "Akademik Proje",
+    "subtitle": "Lisans bitirme projesi olarak geliştirildi",
+    "desc": "EcoChef; bilgisayarlı görü, doğal dil işleme ve modern mobil geliştirmenin entegrasyonunu sergileyen Asst. Prof. Dr. Ahmet Serkan KARATAŞ danışmanlığında Berkay HALICIOĞLU ve Emirhan YETGİN tarafından geliştirilen bir üniversite mezuniyet projesidir."
+  },
+  "footer": {
+    "tagline": "Yapay Zeka Destekli Akıllı Mutfak Asistanınız",
+    "copy": "© 2025 EcoChef. Tüm hakları saklıdır."
+  }
+}

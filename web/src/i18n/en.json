@@ -1,0 +1,99 @@
+{
+  "navbar": {
+    "features": "Features",
+    "howItWorks": "How It Works",
+    "tech": "Tech",
+    "team": "Team"
+  },
+  "hero": {
+    "badge": "🌱 AI-Powered Kitchen",
+    "subtitle": "Your AI-Powered Smart Kitchen Assistant",
+    "desc": "Scan your fridge, type your ingredients — get personalized recipes instantly.",
+    "learnMore": "Learn More ↓",
+    "watchDemo": "Explore Tech"
+  },
+  "howItWorks": {
+    "title": "How It Works",
+    "subtitle": "Three simple steps to your next meal",
+    "step": "Step",
+    "steps": [
+      {
+        "title": "Scan or Type",
+        "desc": "Take a photo of your ingredients or type them in Turkish/English."
+      },
+      {
+        "title": "AI Detects",
+        "desc": "YOLO computer vision identifies ingredients from photos in real time."
+      },
+      {
+        "title": "Get Recipes",
+        "desc": "Real recipes from Spoonacular & TheMealDB, translated and personalized."
+      }
+    ]
+  },
+  "features": {
+    "title": "Key Features",
+    "subtitle": "Everything you need in your kitchen",
+    "items": [
+      { "emoji": "📷", "title": "Visual Ingredient Detection", "desc": "YOLO-based real-time detection from photos with confidence filtering" },
+      { "emoji": "✍️", "title": "Text-Based Search", "desc": "Free-form Turkish text input, auto-translated to English for API queries" },
+      { "emoji": "📵", "title": "Offline Hybrid Mode", "desc": "Local LLaMA NLP suggests Turkish recipes with zero internet connection" },
+      { "emoji": "📅", "title": "Weekly Meal Planner", "desc": "Schedule breakfast, lunch and dinner for every day of the week" },
+      { "emoji": "🔥", "title": "Calorie Tracking", "desc": "Personal daily calorie goal via Harris-Benedict formula; tracks intake across your meal plan" },
+      { "emoji": "🎯", "title": "Personalized Suggestions", "desc": "Analyzes your search history to recommend recipes based on your most-used ingredients" },
+      { "emoji": "⭐", "title": "Recipe Rating System", "desc": "Rate recipes 1–5 stars; see community average ratings on every recipe" },
+      { "emoji": "🛒", "title": "Smart Shopping List", "desc": "Add missing ingredients with one tap; deep-links to Migros, Getir, Trendyol & A101" },
+      { "emoji": "🌍", "title": "Bilingual Support", "desc": "Full Turkish/English i18n — UI, recipe names, ingredients and instructions all translated" }
+    ]
+  },
+  "markets": {
+    "title": "Shop Ingredients Instantly",
+    "subtitle": "Missing an ingredient? The shopping list connects directly to Turkey's biggest online markets.",
+    "items": ["Migros", "Getir", "Trendyol", "A101"]
+  },
+  "tech": {
+    "title": "Built with Modern Tech",
+    "subtitle": "A production-grade architecture",
+    "layers": [
+      {
+        "title": "Mobile Layer",
+        "items": ["React Native (Expo)", "expo-router (file-based nav)", "Context API + AsyncStorage", "Reanimated animations"]
+      },
+      {
+        "title": "Backend Layer",
+        "items": ["Python 3.11 + FastAPI", "SQLite + SQLAlchemy ORM", "JWT auth + token blacklist", "Docker Compose deployment", "Rate limiting per endpoint"]
+      },
+      {
+        "title": "AI & Data Layer",
+        "items": ["YOLO (Ultralytics) — image detection", "LLaMA NLP — offline recipe suggestions", "Spoonacular API — primary source", "TheMealDB API — fallback source", "Google Translate — TR→EN ingredients"]
+      }
+    ]
+  },
+  "screens": {
+    "title": "App Screens",
+    "subtitle": "13+ screens — a complete kitchen companion",
+    "items": [
+      { "label": "Home", "desc": "Ingredient Input" },
+      { "label": "Live Scan", "desc": "Real-time Camera" },
+      { "label": "Explore", "desc": "Results & Detail" },
+      { "label": "Weekly Plan", "desc": "Meal Calendar" },
+      { "label": "Shopping", "desc": "Market Integration" },
+      { "label": "Profile", "desc": "Settings & Stats" }
+    ]
+  },
+  "stats": [
+    { "value": "2",  "label": "AI Modes",      "sub": "Online + Offline" },
+    { "value": "2",  "label": "Recipe APIs",   "sub": "Spoonacular + TheMealDB" },
+    { "value": "13+","label": "App Screens",   "sub": "Full experience" },
+    { "value": "4",  "label": "Market Links",  "sub": "Migros · Getir · Trendyol · A101" }
+  ],
+  "team": {
+    "title": "Academic Project",
+    "subtitle": "Developed as a senior capstone project",
+    "desc": "EcoChef is a university graduation project developed by Berkay HALICIOĞLU and Emirhan YETGİN under the supervision of Asst. Prof. Dr. Ahmet Serkan KARATAŞ, showcasing the integration of computer vision, natural language processing, and modern mobile development."
+  },
+  "footer": {
+    "tagline": "Your AI-Powered Smart Kitchen Assistant",
+    "copy": "© 2025 EcoChef. All rights reserved."
+  }
+}
