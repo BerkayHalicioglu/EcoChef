@@ -98,6 +98,8 @@ _EN_TO_TR: dict[str, str] = {
 COCO_FOOD_CLASSES: frozenset[str] = frozenset(_EN_TO_TR.keys()) | frozenset({
     "bowl", "hot dog", "wine glass", "cup", "fork", "knife", "spoon",
     "dining table", "bottle",
+    # Renk düzeltmesi sonrası gelen isimler (COCO'da yoktu)
+    "lemon", "tomato",
 })
 
 

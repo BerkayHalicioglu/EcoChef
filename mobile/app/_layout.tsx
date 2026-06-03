@@ -15,7 +15,6 @@ import { FavoritesProvider } from '@/context/FavoritesContext';
 import { MealPlanProvider } from '@/context/MealPlanContext';
 import { bildirimIzniIste } from '@/hooks/use-notifications';
 import { ONBOARDING_KEY } from './onboarding';
-import { LOCALE_KEY } from '@/context/I18nContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -28,11 +27,9 @@ function OnboardingGate() {
 
   useEffect(() => {
     const baslat = async () => {
-      if (__DEV__) {
-        await AsyncStorage.multiRemove([ONBOARDING_KEY, LOCALE_KEY]);
-      }
-      const done = await AsyncStorage.getItem(ONBOARDING_KEY);
-      if (!done) router.replace('/onboarding' as any);
+      // Her uygulama açılışında onboarding sıfırlanır — demo için her kişi taze başlar
+      await AsyncStorage.removeItem(ONBOARDING_KEY);
+      router.replace('/onboarding' as any);
       await SplashScreen.hideAsync();
     };
     baslat();

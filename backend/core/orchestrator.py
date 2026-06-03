@@ -111,7 +111,16 @@ class EcoChefOrchestrator:
             log.warning("image_pipeline | Spoonacular failed: %s — trying TheMealDB", e)
 
         # 2. Spoonacular başarısız veya boş → TheMealDB ile dene
-        if not recipes:
+        has_filter = bool(diet or max_calories or min_protein or max_carbs or max_fat)
+
+        # Filtre yoksa → her zaman TheMealDB'ye düş (boş veya hata)
+        # Filtre varken Spoonacular HATA verdiyse (kota/bağlantı) → TheMealDB fallback
+        # Filtre varken Spoonacular boş döndüyse → TheMealDB atla (filtresiz sonuç istemiyoruz)
+        use_mealdb = (not recipes) and (not has_filter or spoon_error is not None)
+
+        if use_mealdb:
+            if has_filter and spoon_error:
+                log.warning("image_pipeline | Spoonacular error with active filter — falling back to TheMealDB (unfiltered)")
             try:
                 with log_duration(log, "TheMealDB.search_by_ingredient"):
                     recipes = search_by_ingredient(ingredients[0], recipe_count)
@@ -123,6 +132,8 @@ class EcoChefOrchestrator:
                         f"Tarif API'lerine ulaşılamadı — "
                         f"Spoonacular: {spoon_error}, TheMealDB: {meal_e}"
                     )
+        elif not recipes and has_filter:
+            log.info("image_pipeline | TheMealDB skipped (Spoonacular OK with active filter, no results)")
 
         log.info("image_pipeline completed | ingredients=%d recipes=%d",
                  len(ingredients), len(recipes))
@@ -173,6 +184,9 @@ class EcoChefOrchestrator:
         ctx_spoon = copy_context()
         ctx_meal = copy_context()
 
+        has_filter = bool(diet or max_calories or min_protein or max_carbs or max_fat)
+        spoon_failed = False
+
         def _spoon() -> list[dict]:
             return ctx_spoon.run(
                 find_recipes_by_ingredients,
@@ -186,7 +200,8 @@ class EcoChefOrchestrator:
         with log_duration(log, "parallel_api_fetch"):
             with ThreadPoolExecutor(max_workers=2) as executor:
                 spoon_fut = executor.submit(_spoon)
-                meal_fut = executor.submit(_meal)
+                # Filtre yoksa TheMealDB'yi paralel başlat; varsa henüz başlatma
+                meal_fut = executor.submit(_meal) if not has_filter else None
 
                 try:
                     spoon_recipes = spoon_fut.result()
@@ -194,13 +209,22 @@ class EcoChefOrchestrator:
                 except Exception as e:
                     api_errors.append(f"Spoonacular: {e}")
                     log.warning("text_pipeline | Spoonacular failed: %s", e)
+                    spoon_failed = True
 
-                try:
-                    meal_recipes = meal_fut.result()
-                    log.info("text_pipeline | TheMealDB recipes=%d", len(meal_recipes))
-                except Exception as e:
-                    api_errors.append(f"TheMealDB: {e}")
-                    log.warning("text_pipeline | TheMealDB failed: %s", e)
+                # Filtre varken Spoonacular çöktüyse (kota/bağlantı) → TheMealDB'ye düş
+                if has_filter and spoon_failed and meal_fut is None:
+                    log.warning("text_pipeline | Spoonacular error with active filter — falling back to TheMealDB (unfiltered)")
+                    meal_fut = executor.submit(_meal)
+
+                if meal_fut is not None:
+                    try:
+                        meal_recipes = meal_fut.result()
+                        log.info("text_pipeline | TheMealDB recipes=%d", len(meal_recipes))
+                    except Exception as e:
+                        api_errors.append(f"TheMealDB: {e}")
+                        log.warning("text_pipeline | TheMealDB failed: %s", e)
+                elif has_filter:
+                    log.info("text_pipeline | TheMealDB skipped (Spoonacular OK with active filter)")
 
         if api_errors and not spoon_recipes and not meal_recipes:
             raise ConnectionError(f"Tarif API'lerine ulaşılamadı: {'; '.join(api_errors)}")

@@ -20,8 +20,11 @@ import { useLocale } from '@/context/I18nContext';
 import { type GlassTokens } from '@/constants/glass';
 import { useAuth } from '@/context/AuthContext';
 import { useFavorites } from '@/hooks/use-favorites';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_URL, NGROK_HEADER } from '@/utils/api';
 import { type Locale } from '@/i18n';
+import { ONBOARDING_KEY } from '@/app/onboarding';
+import { LOCALE_KEY } from '@/context/I18nContext';
 
 const DIET_KEY_MAP: Record<string, string> = {
   vegetarian: 'profile.diet.vegetarian',
@@ -112,6 +115,12 @@ export default function ProfileScreen() {
     router.replace('/login' as any);
   };
 
+  const demoSifirla = async () => {
+    await cikisYap();
+    await AsyncStorage.multiRemove([ONBOARDING_KEY, LOCALE_KEY]);
+    router.replace('/onboarding' as any);
+  };
+
   if (!token || !kullaniciAdi) {
     return (
       <GlassScreen>
@@ -121,6 +130,10 @@ export default function ProfileScreen() {
           <AnimatedButton style={styles.girisBtn} onPress={() => router.push('/login' as any)}>
             <Text style={styles.girisBtnMetni}>{t('common.login')}</Text>
           </AnimatedButton>
+          <TouchableOpacity style={styles.demoBtn} onPress={demoSifirla}>
+            <Feather name="refresh-cw" size={14} color="#F59E0B" />
+            <Text style={styles.demoBtnMetni}>Demoyu Yeniden Başlat</Text>
+          </TouchableOpacity>
         </View>
       </GlassScreen>
     );
@@ -170,6 +183,7 @@ export default function ProfileScreen() {
               end={{ x: 1, y: 1 }}
               style={styles.statBlok}
             >
+              <Feather name="heart" size={22} color="rgba(255,255,255,0.9)" style={{ marginBottom: 6 }} />
               <Text style={styles.statSayi}>{favoriler.length}</Text>
               <Text style={styles.statEtiket}>{t('profile.favCount')}</Text>
             </LinearGradient>
@@ -179,6 +193,7 @@ export default function ProfileScreen() {
               end={{ x: 1, y: 1 }}
               style={styles.statBlok}
             >
+              <Feather name="calendar" size={22} color="rgba(255,255,255,0.9)" style={{ marginBottom: 6 }} />
               <Text style={styles.statSayi}>{planSayisi ?? 0}</Text>
               <Text style={styles.statEtiket}>{t('profile.thisWeek')}</Text>
             </LinearGradient>
@@ -262,6 +277,12 @@ export default function ProfileScreen() {
             })}
           </View>
         </GlassCard>
+
+        {/* Demo Sıfırla */}
+        <TouchableOpacity style={styles.demoBtn} onPress={demoSifirla}>
+          <Feather name="refresh-cw" size={14} color="#F59E0B" />
+          <Text style={styles.demoBtnMetni}>Demoyu Yeniden Başlat</Text>
+        </TouchableOpacity>
 
         {/* Çıkış */}
         <AnimatedButton style={styles.cikisBtn} onPress={cikisYapVeYonlendir}>
@@ -350,5 +371,8 @@ function makeStyles(G: GlassTokens) {
     girisGerekli: { fontSize: 16, color: G.textMid, marginBottom: 20, textAlign: 'center' },
     girisBtn: { backgroundColor: G.glassGreenStrong, borderRadius: G.radius.pill, paddingHorizontal: 32, paddingVertical: 13 },
     girisBtnMetni: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+    demoBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, marginBottom: 8, paddingVertical: 10, paddingHorizontal: 20, borderRadius: G.radius.pill, borderWidth: 1.5, borderColor: '#F59E0B', backgroundColor: '#FFF8E1' },
+    demoBtnMetni: { fontSize: 14, fontWeight: '700', color: '#F59E0B' },
   });
 }

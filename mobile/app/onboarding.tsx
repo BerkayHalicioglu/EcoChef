@@ -20,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { AnimatedButton } from '@/components/AnimatedButton';
 import { useGlass } from '@/context/GlassContext';
 import { useLocale } from '@/context/I18nContext';
+import { useAuth } from '@/context/AuthContext';
 import { type GlassTokens } from '@/constants/glass';
 import { type Locale } from '@/i18n';
 import {
@@ -291,6 +292,7 @@ export default function OnboardingScreen() {
   const styles = useMemo(() => makeStyles(G), [G]);
   const { bottom } = useSafeAreaInsets();
   const { t, setLocale } = useLocale();
+  const { cikisYap } = useAuth();
   const [dilSecildi, setDilSecildi] = useState(false);
   const [fizikselAdim, setFizikselAdim] = useState(false);
   const [hesapAdimi, setHesapAdimi] = useState(false);
@@ -310,12 +312,13 @@ export default function OnboardingScreen() {
 
   // Onboarding'i tamamla ve ana sayfaya git (misafir veya login sonrası)
   const tamamla = async () => {
+    await cikisYap();
     await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
     router.replace('/(tabs)');
   };
 
   // Slaytlardan "atla/devam" → önce hesap adımı göster
-  const bitir = () => setHesapAdimi(true);
+  const bitir = () => { setFizikselAdim(false); setHesapAdimi(true); };
 
   const fizikselKaydetVeBitir = async (m: BedenMetrikleri) => {
     await bedenKaydet(m);

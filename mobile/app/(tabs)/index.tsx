@@ -32,18 +32,18 @@ import { useSearchHistory } from '@/hooks/use-search-history';
 import { usePersonalizedSuggestions } from '@/hooks/use-personalized-suggestions';
 
 const DIYET_SECENEKLERI = [
-  { labelKey: 'home.diet.all', deger: null },
-  { labelKey: 'home.diet.vegetarian', deger: 'vegetarian' },
-  { labelKey: 'home.diet.vegan', deger: 'vegan' },
-  { labelKey: 'home.diet.glutenFree', deger: 'gluten free' },
+  { labelKey: 'home.diet.all',        deger: null,          ikon: null as string | null },
+  { labelKey: 'home.diet.vegetarian', deger: 'vegetarian',  ikon: 'feather' as string | null },
+  { labelKey: 'home.diet.vegan',      deger: 'vegan',       ikon: 'heart' as string | null },
+  { labelKey: 'home.diet.glutenFree', deger: 'gluten free', ikon: 'slash' as string | null },
 ];
 
-type BesinFiltre = { labelKey: string; maxCalories?: number; minProtein?: number; maxCarbs?: number };
+type BesinFiltre = { labelKey: string; ikon: string; maxCalories?: number; minProtein?: number; maxCarbs?: number };
 const BESIN_FILTRELERI: BesinFiltre[] = [
-  { labelKey: 'home.filter.lowCalorie', maxCalories: 400 },
-  { labelKey: 'home.filter.highProtein', minProtein: 25 },
-  { labelKey: 'home.filter.lowCarb', maxCarbs: 20 },
-  { labelKey: 'home.filter.light', maxCalories: 300 },
+  { labelKey: 'home.filter.lowCalorie',  ikon: 'zap',         maxCalories: 400 },
+  { labelKey: 'home.filter.highProtein', ikon: 'trending-up', minProtein: 25 },
+  { labelKey: 'home.filter.lowCarb',     ikon: 'minus-circle', maxCarbs: 20 },
+  { labelKey: 'home.filter.light',       ikon: 'sun',         maxCalories: 300 },
 ];
 
 import { agHatasiMesaji, BASE_URL, langHeaders, NGROK_HEADER, parseHata } from '@/utils/api';
@@ -145,7 +145,7 @@ export default function HomeScreen() {
   const { kullaniciAdi } = useAuth();
   const { favoriEkle, favoriKaldir, favoriMi } = useFavorites();
   const { planEkle } = useMealPlan();
-  const { sonGirdi, kaydet: cacheKaydet } = useRecipeCache();
+  const { sonGirdi, kaydet: cacheKaydet, detayKaydet } = useRecipeCache();
   const { ekle: alisverisEkle } = useShoppingList();
   const { toast, goster } = useToast();
   const { sonBes, kaydet: gecmisKaydet } = useSearchHistory();
@@ -271,7 +271,8 @@ export default function HomeScreen() {
         {/* Son Aramalar */}
         {sonBes.length > 0 && (
           <View style={styles.sonAramaSatiri}>
-            <TouchableOpacity onPress={() => router.push('/search-history' as any)}>
+            <TouchableOpacity onPress={() => router.push('/search-history' as any)} style={styles.baslikSatiri}>
+              <Feather name="clock" size={12} color={G.textLight} />
               <Text style={styles.sonAramaBaslik}>{t('home.recentSearches')}</Text>
             </TouchableOpacity>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sonAramaChipler}>
@@ -292,7 +293,10 @@ export default function HomeScreen() {
         {(kisiselOneriler.length > 0 || kisiselYukleniyor) && (
           <View style={styles.kisiselKutu}>
             <View style={styles.kisiselBaslikSatiri}>
-              <Text style={styles.kisiselBaslik}>{t('home.forYou')}</Text>
+              <View style={styles.baslikSatiri}>
+                <Feather name="star" size={15} color={G.textDark} />
+                <Text style={styles.kisiselBaslik}>{t('home.forYou')}</Text>
+              </View>
               {topMalzemeler.length > 0 && (
                 <Text style={styles.kisiselAlt}>{t('home.basedOn', { items: topMalzemeler.join(', ') })}</Text>
               )}
@@ -340,9 +344,16 @@ export default function HomeScreen() {
                   );
                 }}
               >
-                <Text style={[styles.sekmeBtnMetin, aktifTab === tab && { color: '#fff' }]}>
-                  {tab === 'metin' ? t('home.textTab') : t('home.imageTab')}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <Feather
+                    name={tab === 'metin' ? 'edit-3' : 'camera'}
+                    size={13}
+                    color={aktifTab === tab ? '#fff' : G.textMid}
+                  />
+                  <Text style={[styles.sekmeBtnMetin, aktifTab === tab && { color: '#fff' }]}>
+                    {tab === 'metin' ? t('home.textTab') : t('home.imageTab')}
+                  </Text>
+                </View>
               </TouchableOpacity>
             ))}
           </View>
@@ -371,10 +382,16 @@ export default function HomeScreen() {
               {secilenGorsel && <Image source={{ uri: secilenGorsel }} style={styles.onizleme} />}
               <View style={styles.ikiliButon}>
                 <AnimatedButton style={styles.ikiliBtnSol} onPress={() => gorselSec('galeri')}>
-                  <Text style={styles.ikiliBtnMetni}>{t('home.gallery')}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Feather name="image" size={15} color={G.primary} />
+                    <Text style={styles.ikiliBtnMetni}>{t('home.gallery')}</Text>
+                  </View>
                 </AnimatedButton>
                 <AnimatedButton style={styles.ikiliBtnSol} onPress={() => gorselSec('kamera')}>
-                  <Text style={styles.ikiliBtnMetni}>{t('home.camera')}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Feather name="camera" size={15} color={G.primary} />
+                    <Text style={styles.ikiliBtnMetni}>{t('home.camera')}</Text>
+                  </View>
                 </AnimatedButton>
               </View>
               {gorselYukleniyor && (
@@ -389,32 +406,39 @@ export default function HomeScreen() {
 
         {/* Diyet Filtreleri */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.diyetScroll} contentContainerStyle={styles.diyetSatiri}>
-          {DIYET_SECENEKLERI.map((d) => (
-            <TouchableOpacity
-              key={d.labelKey}
-              style={seciliDiyet === d.deger ? { ...styles.diyetChip, ...styles.diyetChipAktif } : styles.diyetChip}
-              onPress={() => setSeciliDiyet(d.deger)}
-            >
-              <Text style={seciliDiyet === d.deger ? { ...styles.diyetChipMetin, color: '#fff' } : styles.diyetChipMetin}>
-                {t(d.labelKey)}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {DIYET_SECENEKLERI.map((d) => {
+            const aktif = seciliDiyet === d.deger;
+            const renk = aktif ? '#fff' : G.textMid;
+            return (
+              <TouchableOpacity
+                key={d.labelKey}
+                style={aktif ? { ...styles.diyetChip, ...styles.diyetChipAktif } : styles.diyetChip}
+                onPress={() => setSeciliDiyet(d.deger)}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  {d.ikon && <Feather name={d.ikon as any} size={12} color={renk} />}
+                  <Text style={[styles.diyetChipMetin, { color: renk }]}>{t(d.labelKey)}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
 
         {/* Besin Değeri Filtreleri */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.diyetScroll} contentContainerStyle={styles.diyetSatiri}>
           {BESIN_FILTRELERI.map((b) => {
             const aktif = seciliBesin?.labelKey === b.labelKey;
+            const renk = aktif ? '#fff' : G.accent;
             return (
               <TouchableOpacity
                 key={b.labelKey}
                 style={aktif ? { ...styles.diyetChip, ...styles.besinChipAktif } : { ...styles.diyetChip, ...styles.besinChip }}
                 onPress={() => setSeciliBesin(aktif ? null : b)}
               >
-                <Text style={aktif ? { ...styles.diyetChipMetin, color: '#fff' } : { ...styles.diyetChipMetin, color: G.accent }}>
-                  {t(b.labelKey)}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <Feather name={b.ikon as any} size={12} color={renk} />
+                  <Text style={[styles.diyetChipMetin, { color: renk }]}>{t(b.labelKey)}</Text>
+                </View>
               </TouchableOpacity>
             );
           })}
@@ -423,7 +447,10 @@ export default function HomeScreen() {
         {/* Tespit edilen malzemeler */}
         {tespitEdilenMalzemeler.length > 0 && (
           <View style={styles.malzemeKutusu}>
-            <Text style={styles.bolumBaslik}>{t('home.detected')}</Text>
+            <View style={styles.baslikSatiri}>
+              <Feather name="search" size={16} color={G.textDark} />
+              <Text style={styles.bolumBaslik}>{t('home.detected')}</Text>
+            </View>
             <View style={styles.chipSatiri}>
               {tespitEdilenMalzemeler.map((m, i) => (
                 <View key={i} style={styles.malzemeChipGreen}>
@@ -442,11 +469,17 @@ export default function HomeScreen() {
           <View>
             {onbellek && (
               <View style={styles.onbellekBanner}>
-                <Text style={styles.onbellekMetin}>{t('home.offline')}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Feather name="wifi-off" size={14} color={G.warning} />
+                  <Text style={styles.onbellekMetin}>{t('home.offline')}</Text>
+                </View>
               </View>
             )}
             <View style={styles.sonucHeader}>
-              <Text style={styles.bolumBaslik}>{mod === 'gorsel' ? t('home.foundRecipes') : t('home.suggestedRecipes')}</Text>
+              <View style={styles.baslikSatiri}>
+                <Feather name={mod === 'gorsel' ? 'book-open' : 'zap'} size={16} color={G.textDark} />
+                <Text style={styles.bolumBaslik}>{mod === 'gorsel' ? t('home.foundRecipes') : t('home.suggestedRecipes')}</Text>
+              </View>
               <TouchableOpacity onPress={sifirla}>
                 <Text style={styles.sifirlaLink}>{t('home.clear')}</Text>
               </TouchableOpacity>
@@ -482,6 +515,19 @@ export default function HomeScreen() {
           onKapat={() => setPlanModalGorunur(false)}
           onEkle={async (tarih, ogun) => {
             const sonuc = await planEkle({ tarih, ogun, recipe_id: planModalTarif.id, recipe_isim: planModalTarif.isim, recipe_gorsel: planModalTarif.gorsel });
+            // Plan eklenince beslenme verisini detail cache'e kaydet — plan ekranı kaloriyi anında görebilsin
+            if (sonuc && planModalTarif.id && planModalTarif.beslenme) {
+              detayKaydet({
+                id: planModalTarif.id,
+                isim: planModalTarif.isim,
+                gorsel: planModalTarif.gorsel ?? null,
+                sure_dakika: null,
+                porsiyon: null,
+                malzemeler: planModalTarif.kullanilan_malzemeler ?? [],
+                adimlar: [],
+                beslenme: planModalTarif.beslenme,
+              });
+            }
             goster(sonuc ? t('home.addedToPlan') : t('home.planError'), sonuc ? 'basari' : 'hata');
           }}
         />
@@ -548,6 +594,7 @@ function makeStyles(G: GlassTokens) {
     beslenmeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: G.accentMuted, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
     beslenmeChipMetni: { fontSize: 11, color: G.accent, fontWeight: '600' },
 
+    baslikSatiri: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     sonAramaSatiri: { marginBottom: 12 },
     sonAramaBaslik: { fontSize: 12, color: G.textLight, fontWeight: '600', marginBottom: 8 },
     sonAramaChipler: { gap: 8, paddingBottom: 2 },
